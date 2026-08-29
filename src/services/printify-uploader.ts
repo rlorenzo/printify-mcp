@@ -134,7 +134,7 @@ export async function uploadImageToPrintify(
         }
       } catch (verifyError: any) {
         console.error('Error verifying file before upload:', verifyError);
-        throw new Error(`Failed to verify file before upload: ${verifyError.message || verifyError}`);
+        throw new Error(`Failed to verify file before upload: ${verifyError.message || verifyError}`, { cause: verifyError });
       }
 
       // Upload to Printify

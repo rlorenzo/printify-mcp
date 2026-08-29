@@ -74,7 +74,7 @@ This MCP server provides the following capabilities:
 
 ## Prerequisites
 
-- Node.js (v18 or higher)
+- Node.js (v24 or higher)
 - npm (v7 or higher)
 - Printify API key
 - Replicate API token (for AI image generation)

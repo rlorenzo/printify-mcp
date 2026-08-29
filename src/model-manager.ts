@@ -1,4 +1,3 @@
-import Replicate from 'replicate';
 
 /**
  * Available models with their capabilities
@@ -171,7 +170,7 @@ export class DefaultsManager {
     const selectedModelId = options.model || this.defaults.model;
 
     // Set up the appropriate input parameters based on model
-    let input: any = { prompt };
+    const input: any = { prompt };
 
     // Apply defaults first, then override with user-specified options
     if (selectedModelId === "black-forest-labs/flux-1.1-pro-ultra") {

@@ -601,7 +601,7 @@ export class PrintifyAPI {
             detailedError += `\nStack trace:\n${error.stack}\n`;
           }
 
-          throw new Error(detailedError);
+          throw new Error(detailedError, { cause: error });
         }
       } else if (source.startsWith('data:image/')) {
         // If source is base64 data with data URL prefix

@@ -2,7 +2,7 @@
  * Printify shops service for Printify MCP
  */
 import { PrintifyAPI } from '../printify-api.js';
-import { formatErrorResponse, formatSuccessResponse } from '../utils/error-handler.js';
+import { formatErrorResponse } from '../utils/error-handler.js';
 
 /**
  * Get Printify status

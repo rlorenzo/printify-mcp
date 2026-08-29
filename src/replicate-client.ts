@@ -125,10 +125,14 @@ export class ReplicateClient {
         // If output is already a Buffer
         console.log('Replicate returned a Buffer');
         imageData = output;
-      } else if (output instanceof Uint8Array || output instanceof ArrayBuffer) {
-        // If output is a Uint8Array or ArrayBuffer
-        console.log('Replicate returned a Uint8Array or ArrayBuffer');
+      } else if (output instanceof Uint8Array) {
+        // If output is a Uint8Array
+        console.log('Replicate returned a Uint8Array');
         imageData = Buffer.from(output);
+      } else if (output instanceof ArrayBuffer) {
+        // If output is an ArrayBuffer
+        console.log('Replicate returned an ArrayBuffer');
+        imageData = Buffer.from(new Uint8Array(output));
       } else if (typeof output === 'object' && output !== null) {
         // If output is a FileOutput object or similar
         console.log('Replicate returned an object:', Object.keys(output));
@@ -186,7 +190,7 @@ export class ReplicateClient {
         modelId: modelId || this.getDefault('model')
       };
 
-      throw new Error(`Replicate API error: ${error.message}\nDetails: ${JSON.stringify(errorDetails, null, 2)}`);
+      throw new Error(`Replicate API error: ${error.message}\nDetails: ${JSON.stringify(errorDetails, null, 2)}`, { cause: error });
     }
   }
 

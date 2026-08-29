@@ -87,7 +87,7 @@ let replicateClient: ReplicateClient | null = null;
 server.tool(
   "get_printify_status",
   {},
-  async ({}): Promise<{ content: any[], isError?: boolean }> => {
+  async (): Promise<{ content: any[], isError?: boolean }> => {
     // Import the printify shops service
     const { getPrintifyStatus } = await import('./services/printify-shops.js');
 
@@ -118,7 +118,7 @@ server.tool(
 server.tool(
   "list_shops",
   {},
-  async ({}): Promise<{ content: any[], isError?: boolean }> => {
+  async (): Promise<{ content: any[], isError?: boolean }> => {
     // Import the printify shops service
     const { listPrintifyShops } = await import('./services/printify-shops.js');
 
@@ -837,7 +837,7 @@ server.prompt(
       }
     }
 
-    let audienceText = targetAudience ? `\nTarget audience: ${targetAudience}` : "";
+    const audienceText = targetAudience ? `\nTarget audience: ${targetAudience}` : "";
 
     return {
       messages: [{
