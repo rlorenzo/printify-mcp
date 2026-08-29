@@ -52,16 +52,16 @@ export async function generateImage(
     // Get the current default model for informational purposes
     const defaultModel = replicateClient.getDefaultModel();
     const usingModel = options.model || defaultModel;
-    console.log(`Using model: ${usingModel} (${options.model ? 'override' : 'default'})`);
-    console.log(`Prompt: ${prompt}`);
+    console.error(`Using model: ${usingModel} (${options.model ? 'override' : 'default'})`);
+    console.error(`Prompt: ${prompt}`);
 
     // STEP 1: Generate the image with Replicate
-    console.log('Generating image with Replicate...');
+    console.error('Generating image with Replicate...');
     const imageBuffer = await replicateClient.generateImage(prompt, modelOptions);
-    console.log(`Image generated successfully, buffer size: ${imageBuffer.length} bytes`);
+    console.error(`Image generated successfully, buffer size: ${imageBuffer.length} bytes`);
 
     // STEP 2: Process the image with Sharp
-    console.log('Processing image with Sharp...');
+    console.error('Processing image with Sharp...');
 
     // Get the output format from options (already defaulted to png earlier)
     const outputFormat = modelOptions.outputFormat;
@@ -90,7 +90,7 @@ export async function generateImage(
 
     // Get the processed image as a buffer
     const processedBuffer = await sharpInstance.toBuffer();
-    console.log(`Image processed successfully, buffer size: ${processedBuffer.length} bytes`);
+    console.error(`Image processed successfully, buffer size: ${processedBuffer.length} bytes`);
 
     // Determine the final filename with extension
     const fileExtension = outputFormat === 'jpeg' ? 'jpg' : outputFormat;

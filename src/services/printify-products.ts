@@ -26,7 +26,7 @@ export async function listProducts(
     const page = options.page || 1;
 
     // Get products
-    const products = await printifyClient.getProducts(limit, page);
+    const products = await printifyClient.getProducts(page, limit);
 
     return {
       success: true,
@@ -34,10 +34,11 @@ export async function listProducts(
       response: formatSuccessResponse(
         'Products Retrieved Successfully',
         {
-          Count: products.length,
+          Count: products.data?.length ?? 0,
           Page: page,
           Limit: limit,
-          Shop: currentShop
+          Shop: currentShop,
+          Products: (products.data ?? []).map((p: any) => ({ id: p.id, title: p.title }))
         }
       )
     };
@@ -136,6 +137,7 @@ export async function createProduct(
       position: string;
       imageId: string;
     }>;
+    tags?: string[];
   }
 ) {
   try {
@@ -207,6 +209,7 @@ export async function updateProduct(
       position: string;
       imageId: string;
     }>;
+    tags?: string[];
   }
 ) {
   try {

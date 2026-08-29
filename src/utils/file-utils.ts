@@ -10,7 +10,7 @@ import * as path from 'path';
 export function ensureDirectoryExists(dirPath: string): void {
   if (!fs.existsSync(dirPath)) {
     fs.mkdirSync(dirPath, { recursive: true });
-    console.log(`Created directory: ${dirPath}`);
+    console.error(`Created directory: ${dirPath}`);
   }
 }
 
@@ -38,7 +38,7 @@ export function cleanupFiles(filePaths: string[]): void {
     if (filePath && fs.existsSync(filePath)) {
       try {
         fs.unlinkSync(filePath);
-        console.log(`Cleaned up file: ${filePath}`);
+        console.error(`Cleaned up file: ${filePath}`);
       } catch (error) {
         console.error(`Error cleaning up file ${filePath}:`, error);
       }
@@ -64,4 +64,25 @@ export function getFileInfo(filePath: string): { exists: boolean; size?: number;
   }
 
   return { exists: false };
+}
+
+/**
+ * Resolve a path and confirm it stays inside an allowed base directory.
+ *
+ * Tool arguments reach this server from a model, so a path like
+ * `../../.ssh/id_rsa` is reachable input rather than a hypothetical. Uploads are
+ * confined to `ALLOWED_FILE_DIR` (default: the working directory).
+ */
+export function validateFilePath(filePath: string, operation: 'read' | 'write'): string {
+  const baseDir = path.resolve(process.env.ALLOWED_FILE_DIR || process.cwd());
+  const resolved = path.resolve(filePath);
+
+  if (resolved !== baseDir && !resolved.startsWith(baseDir + path.sep)) {
+    throw new Error(
+      `File ${operation} denied: "${resolved}" is outside the allowed directory "${baseDir}". ` +
+      `Set ALLOWED_FILE_DIR to permit another location.`
+    );
+  }
+
+  return resolved;
 }
