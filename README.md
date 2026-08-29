@@ -115,6 +115,15 @@ PRINTIFY_SHOP_ID=your_shop_id
 
 # Optional: Only needed if you want to use image generation features
 REPLICATE_API_TOKEN=your_replicate_api_token
+
+# Optional: Directory that local image uploads are restricted to.
+# Defaults to the working directory. Uploads resolving outside it are refused,
+# so set this if your images live elsewhere (e.g. ~/Pictures).
+ALLOWED_FILE_DIR=/path/to/your/images
+
+# Optional: Set to any value to keep a copy of every generated or uploaded
+# image under ./debug for troubleshooting. Off by default.
+PRINTIFY_MCP_DEBUG=1
 ```
 
 You can use the `.env.example` file as a template by copying it:

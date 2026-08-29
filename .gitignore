@@ -11,4 +11,7 @@ test-*.js
 *.png
 *.jpg
 *.jpeg
-*.webp
+*.webp.env.*
+!.env.example
+debug/
+temp/

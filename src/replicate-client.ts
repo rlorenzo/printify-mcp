@@ -103,13 +103,13 @@ export class ReplicateClient {
       const mergedOptions = { ...options, ...apiOptions };
       const { modelId: selectedModelId, input } = this.defaultsManager.prepareModelInput(prompt, mergedOptions);
 
-      console.log(`Using model: ${selectedModelId}`);
-      console.log(`Input parameters: ${JSON.stringify(input, null, 2)}`);
+      console.error(`Using model: ${selectedModelId}`);
+      console.error(`Input parameters: ${JSON.stringify(input, null, 2)}`);
 
       // Run the model using the Replicate client
       const output = await this.client.run(selectedModelId as any, { input });
 
-      console.log('Replicate output type:', output ? (output.constructor ? output.constructor.name : typeof output) : 'null');
+      console.error('Replicate output type:', output ? (output.constructor ? output.constructor.name : typeof output) : 'null');
 
       // Handle different output types from Replicate
       let imageData: Buffer;
@@ -118,44 +118,44 @@ export class ReplicateClient {
         throw new Error('Replicate returned null or undefined output');
       } else if (typeof output === 'string') {
         // If output is a URL, download the image
-        console.log('Replicate returned a string (URL):', output);
+        console.error('Replicate returned a string (URL):', output);
         const response = await axios.get(output, { responseType: 'arraybuffer' });
         imageData = Buffer.from(response.data);
       } else if (Buffer.isBuffer(output)) {
         // If output is already a Buffer
-        console.log('Replicate returned a Buffer');
+        console.error('Replicate returned a Buffer');
         imageData = output;
       } else if (output instanceof Uint8Array) {
         // If output is a Uint8Array
-        console.log('Replicate returned a Uint8Array');
+        console.error('Replicate returned a Uint8Array');
         imageData = Buffer.from(output);
       } else if (output instanceof ArrayBuffer) {
         // If output is an ArrayBuffer
-        console.log('Replicate returned an ArrayBuffer');
+        console.error('Replicate returned an ArrayBuffer');
         imageData = Buffer.from(new Uint8Array(output));
       } else if (typeof output === 'object' && output !== null) {
         // If output is a FileOutput object or similar
-        console.log('Replicate returned an object:', Object.keys(output));
+        console.error('Replicate returned an object:', Object.keys(output));
 
         // Try to get the file content
         if ('file' in output && output.file) {
-          console.log('Object has a file property');
+          console.error('Object has a file property');
           // Use type assertion to handle FileOutput object
           const fileContent = await (output.file as any).arrayBuffer();
           imageData = Buffer.from(fileContent);
         } else if ('arrayBuffer' in output && typeof output.arrayBuffer === 'function') {
-          console.log('Object has an arrayBuffer method');
+          console.error('Object has an arrayBuffer method');
           // Use type assertion for the arrayBuffer method
           const arrayBuffer = await (output as any).arrayBuffer();
           imageData = Buffer.from(arrayBuffer);
         } else if ('blob' in output && typeof output.blob === 'function') {
-          console.log('Object has a blob method');
+          console.error('Object has a blob method');
           // Use type assertion for the blob method
           const blob = await (output as any).blob();
           const arrayBuffer = await (blob as any).arrayBuffer();
           imageData = Buffer.from(arrayBuffer);
         } else if ('text' in output && typeof output.text === 'function') {
-          console.log('Object has a text method');
+          console.error('Object has a text method');
           // Use type assertion for the text method
           const text = await (output as any).text();
           // If the text is a URL, download the image
@@ -168,7 +168,7 @@ export class ReplicateClient {
         } else {
           // Last resort: try to stringify the object and see if it's a URL
           const str = output.toString();
-          console.log('Object toString():', str);
+          console.error('Object toString():', str);
           if (str.startsWith('http')) {
             const response = await axios.get(str, { responseType: 'arraybuffer' });
             imageData = Buffer.from(response.data);
@@ -204,7 +204,7 @@ export class ReplicateClient {
     // Ensure outputFormat is always defined and defaults to png
     outputFormat = outputFormat || 'png';
     try {
-      console.log(`Processing image with Sharp to ${outputFormat} format`);
+      console.error(`Processing image with Sharp to ${outputFormat} format`);
 
       // Process the image with Sharp to ensure it's valid for Printify
       let sharpInstance = sharp(imageData);
@@ -220,7 +220,7 @@ export class ReplicateClient {
 
       // Get the processed image as a buffer
       const processedBuffer = await sharpInstance.toBuffer();
-      console.log(`Image processed successfully, buffer size: ${processedBuffer.length} bytes`);
+      console.error(`Image processed successfully, buffer size: ${processedBuffer.length} bytes`);
 
       return processedBuffer;
     } catch (error) {

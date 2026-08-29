@@ -73,7 +73,7 @@ export class DefaultsManager {
 
     // Set the default value
     this.defaults[option] = value;
-    console.log(`Default ${option} set to: ${value}`);
+    console.error(`Default ${option} set to: ${value}`);
   }
 
   /**

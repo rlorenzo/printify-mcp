@@ -48,15 +48,10 @@ export function formatErrorResponse(
     }
   });
   
-  // Add system information
-  text += `- **Current Working Directory**: ${process.cwd()}\n`;
-  text += `- **Node.js Version**: ${process.version}\n`;
-  text += `- **Platform**: ${process.platform}\n\n`;
-  
-  // Add API response data if available
+  // Add API response status if available. The response body is deliberately
+  // omitted: it can carry account details, and it reaches the model verbatim.
   if (error.response) {
-    text += `- **API Response Status**: ${error.response.status}\n`;
-    text += `- **API Response Data**: ${JSON.stringify(error.response.data, null, 2)}\n\n`;
+    text += `- **API Response Status**: ${error.response.status}\n\n`;
   }
   
   // Add tips if provided
