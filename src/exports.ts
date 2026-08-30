@@ -1,17 +1,34 @@
-// Export the main classes and types for use as a library
-export { PrintifyAPI, type PrintifyShop } from './printify-api.js';
-export { ReplicateClient } from './replicate-client.js';
-
-// Export a function to create and configure the MCP server
+/**
+ * Library entrypoint.
+ *
+ * This module is the package's `main`/`exports` target. It deliberately does not
+ * import `stdio-guard.js` or connect a transport: importing the library must not
+ * patch the consumer's console or take over their stdio. The executable
+ * (`index.ts`) owns those side effects.
+ */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import dotenv from "dotenv";
 import { PrintifyAPI } from "./printify-api.js";
 import { ReplicateClient } from "./replicate-client.js";
-import dotenv from "dotenv";
+import { registerTools, type PrintifyContext } from "./tools.js";
+
+// Public surface
+export { PrintifyAPI, type PrintifyShop } from './printify-api.js';
+export { ReplicateClient } from './replicate-client.js';
+export { registerTools, type PrintifyContext } from './tools.js';
+export * from './services/image-generator.js';
+export * from './services/printify-uploader.js';
+export * from './services/printify-products.js';
+export * from './services/printify-blueprints.js';
+export * from './services/printify-shops.js';
+export * from './utils/error-handler.js';
+export * from './utils/file-utils.js';
 
 /**
- * Creates and configures a Printify MCP server
- * @param options Configuration options
- * @returns The configured MCP server
+ * Create a Printify MCP server with the full tool surface registered.
+ *
+ * The caller is responsible for connecting a transport, which keeps this usable
+ * over stdio, HTTP, or in tests.
  */
 export function createPrintifyMcpServer(options?: {
   printifyApiKey?: string;
@@ -25,41 +42,33 @@ export function createPrintifyMcpServer(options?: {
     dotenv.config();
   }
 
-  // Create the MCP server
   const server = new McpServer({
     name: options?.serverName || "Printify-MCP",
     version: options?.serverVersion || "1.0.0"
   });
 
-  // Initialize API clients
   const printifyApiKey = options?.printifyApiKey || process.env.PRINTIFY_API_KEY;
   const printifyShopId = options?.printifyShopId || process.env.PRINTIFY_SHOP_ID;
   const replicateApiToken = options?.replicateApiToken || process.env.REPLICATE_API_TOKEN;
 
-  // Create the Printify API client if API key is provided
-  let printifyClient: PrintifyAPI | null = null;
-  if (printifyApiKey) {
-    printifyClient = new PrintifyAPI(printifyApiKey, printifyShopId);
-  }
+  const ctx: PrintifyContext = {
+    printifyClient: printifyApiKey ? new PrintifyAPI(printifyApiKey, printifyShopId) : null,
+    replicateClient: replicateApiToken ? new ReplicateClient(replicateApiToken) : null
+  };
 
-  // Create the Replicate API client if API token is provided
-  let replicateClient: ReplicateClient | null = null;
-  if (replicateApiToken) {
-    replicateClient = new ReplicateClient(replicateApiToken);
-  }
+  registerTools(server, ctx);
 
   return {
     server,
-    printifyClient,
-    replicateClient,
+    get printifyClient() { return ctx.printifyClient; },
+    get replicateClient() { return ctx.replicateClient; },
     async initialize() {
-      if (printifyClient) {
-        await printifyClient.initialize();
+      if (ctx.printifyClient) {
+        await ctx.printifyClient.initialize();
       }
-      return { printifyClient, replicateClient };
+      return { printifyClient: ctx.printifyClient, replicateClient: ctx.replicateClient };
     }
   };
 }
 
-// Default export
 export default createPrintifyMcpServer;
