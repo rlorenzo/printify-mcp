@@ -5,6 +5,45 @@ import { PrintifyAPI } from '../printify-api.js';
 import { formatErrorResponse, formatSuccessResponse } from '../utils/error-handler.js';
 
 /**
+ * A variant's pricing/availability as supplied by the caller.
+ */
+interface ProductVariantInput {
+  variantId: number;
+  price: number;
+  isEnabled?: boolean;
+}
+
+/**
+ * Print areas keyed by the placement name Printify expects.
+ */
+type ProductPrintAreas = Record<string, {
+  position: string;
+  imageId: string;
+}>;
+
+/**
+ * Fields that can be changed on an existing product.
+ */
+interface UpdateProductData {
+  title?: string;
+  description?: string;
+  variants?: ProductVariantInput[];
+  printAreas?: ProductPrintAreas;
+  tags?: string[];
+}
+
+/**
+ * Everything needed to create a product; the shared fields are required here.
+ */
+interface CreateProductData extends UpdateProductData {
+  title: string;
+  description: string;
+  blueprintId: number;
+  printProviderId: number;
+  variants: ProductVariantInput[];
+}
+
+/**
  * List products from Printify
  */
 export async function listProducts(
@@ -83,6 +122,9 @@ export async function getProduct(
     // Get product
     const product = await printifyClient.getProduct(productId);
 
+    const variants: any[] = product.variants ?? [];
+    const enabled = variants.filter((v: any) => v.is_enabled);
+
     return {
       success: true,
       product,
@@ -91,7 +133,41 @@ export async function getProduct(
         {
           ProductId: productId,
           Title: product.title,
-          Shop: currentShop
+          Shop: currentShop,
+          Description: product.description ?? '',
+          Tags: product.tags ?? [],
+          BlueprintId: product.blueprint_id ?? null,
+          PrintProviderId: product.print_provider_id ?? null,
+          Visible: product.visible ?? false,
+          Locked: product.is_locked ?? false,
+          CreatedAt: product.created_at ?? '',
+          UpdatedAt: product.updated_at ?? '',
+          VariantCount: variants.length,
+          EnabledCount: enabled.length,
+          // Only enabled variants: a blueprint can carry hundreds, and emitting
+          // them all pushes the response past the MCP output limit.
+          Variants: enabled.map((v: any) => ({
+            id: v.id,
+            title: v.title,
+            price: v.price,
+            cost: v.cost,
+            is_enabled: v.is_enabled
+          })),
+          PrintAreas: (product.print_areas ?? []).map((area: any) => ({
+            variantCount: (area.variant_ids ?? []).length,
+            placeholders: (area.placeholders ?? []).map((ph: any) => ({
+              position: ph.position,
+              images: (ph.images ?? []).map((img: any) => ({
+                id: img.id,
+                name: img.name,
+                x: img.x,
+                y: img.y,
+                scale: img.scale,
+                angle: img.angle
+              }))
+            }))
+          })),
+          SalesChannel: product.external ?? null
         }
       )
     };
@@ -123,22 +199,7 @@ export async function getProduct(
  */
 export async function createProduct(
   printifyClient: PrintifyAPI,
-  productData: {
-    title: string;
-    description: string;
-    blueprintId: number;
-    printProviderId: number;
-    variants: Array<{
-      variantId: number;
-      price: number;
-      isEnabled?: boolean;
-    }>;
-    printAreas?: Record<string, {
-      position: string;
-      imageId: string;
-    }>;
-    tags?: string[];
-  }
+  productData: CreateProductData
 ) {
   try {
     // Validate shop is selected
@@ -197,20 +258,7 @@ export async function createProduct(
 export async function updateProduct(
   printifyClient: PrintifyAPI,
   productId: string,
-  updateData: {
-    title?: string;
-    description?: string;
-    variants?: Array<{
-      variantId: number;
-      price: number;
-      isEnabled?: boolean;
-    }>;
-    printAreas?: Record<string, {
-      position: string;
-      imageId: string;
-    }>;
-    tags?: string[];
-  }
+  updateData: UpdateProductData
 ) {
   try {
     // Validate shop is selected

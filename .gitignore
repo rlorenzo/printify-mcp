@@ -25,3 +25,4 @@ temp/
 # test coverage output
 coverage/
 .tmp-test/
+PLAN.md

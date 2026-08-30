@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { listProducts } from '../src/services/printify-products.js';
+import { listProducts, getProduct } from '../src/services/printify-products.js';
 
 function fakeClient(overrides: Record<string, any> = {}) {
   return {
@@ -48,6 +48,102 @@ describe('listProducts', () => {
   it('fails when no shop is selected', async () => {
     const client = fakeClient({ getCurrentShop: () => null });
     const result = await listProducts(client, {});
+    expect(result.success).toBe(false);
+  });
+});
+
+function fakeProduct(overrides: Record<string, any> = {}) {
+  return {
+    id: 'prod1',
+    title: 'Test Product',
+    description: 'A test product description.',
+    tags: ['test-tag', 'sample'],
+    blueprint_id: 1,
+    print_provider_id: 2,
+    visible: true,
+    is_locked: false,
+    created_at: '2026-08-01 10:00:00+00:00',
+    updated_at: '2026-08-30 10:00:00+00:00',
+    variants: [
+      { id: 101, title: 'Variant A', price: 1000, cost: 400, is_enabled: true },
+      { id: 102, title: 'Variant B', price: 1000, cost: 400, is_enabled: true },
+      { id: 103, title: 'Variant C', price: 2000, cost: 900, is_enabled: false }
+    ],
+    print_areas: [
+      {
+        variant_ids: [101, 102],
+        placeholders: [
+          {
+            position: 'front',
+            images: [{ id: 'img1', name: 'front.png', x: 0.5, y: 0.5, scale: 0.9, angle: 0 }]
+          }
+        ]
+      }
+    ],
+    external: { id: 'ext1', handle: 'test-product' },
+    ...overrides
+  };
+}
+
+function productClient(product: any = fakeProduct(), overrides: Record<string, any> = {}) {
+  return fakeClient({ getProduct: vi.fn(async () => product), ...overrides });
+}
+
+describe('getProduct', () => {
+  // Regression: the service fetched the full record, then built a response
+  // carrying only ProductId/Title/Shop, so nothing else ever reached the caller.
+  it('includes the description, tags and catalog ids', async () => {
+    const result = await getProduct(productClient(), 'prod1');
+    const text = result.response.content[0].text;
+    expect(text).toContain('A test product description.');
+    expect(text).toContain('"test-tag"');
+    expect(text).toContain('**BlueprintId**: "1"');
+    expect(text).toContain('**PrintProviderId**: "2"');
+  });
+
+  it('lists enabled variants with their ids, prices and costs', async () => {
+    const result = await getProduct(productClient(), 'prod1');
+    const text = result.response.content[0].text;
+    expect(text).toContain('101');
+    expect(text).toContain('1000');
+    expect(text).toContain('400');
+  });
+
+  it('excludes disabled variants but still counts them', async () => {
+    const result = await getProduct(productClient(), 'prod1');
+    const text = result.response.content[0].text;
+    expect(text).toContain('**VariantCount**: "3"');
+    expect(text).toContain('**EnabledCount**: "2"');
+    expect(text).not.toContain('103');
+  });
+
+  it('surfaces print area image ids and placement', async () => {
+    const result = await getProduct(productClient(), 'prod1');
+    const text = result.response.content[0].text;
+    expect(text).toContain('"id":"img1"');
+    expect(text).toContain('"position":"front"');
+    expect(text).toContain('"scale":0.9');
+  });
+
+  it('keeps the original ProductId, Title and Shop fields', async () => {
+    const result = await getProduct(productClient(), 'prod1');
+    const text = result.response.content[0].text;
+    expect(text).toContain('**ProductId**: "prod1"');
+    expect(text).toContain('Test Product');
+    expect(text).toContain('Test Shop');
+  });
+
+  // Printify omits keys on some products, and formatFields renders a missing
+  // value as the literal string "undefined".
+  it('emits no "undefined" for a sparse record', async () => {
+    const sparse = { id: 'prod2', title: 'Bare' };
+    const result = await getProduct(productClient(sparse), 'prod2');
+    expect(result.response.content[0].text).not.toContain('undefined');
+  });
+
+  it('fails when no shop is selected', async () => {
+    const client = productClient(fakeProduct(), { getCurrentShop: () => null });
+    const result = await getProduct(client, 'prod1');
     expect(result.success).toBe(false);
   });
 });
