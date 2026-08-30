@@ -10,6 +10,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { PrintifyAPI } from "./printify-api.js";
 import { ReplicateClient } from "./replicate-client.js";
+import { mergeGenerationOptions } from "./generation-options.js";
 
 /**
  * Clients shared with the tool handlers.
@@ -51,6 +52,51 @@ function printifyNotReady(): ToolResult {
   };
 }
 
+/**
+ * Collapse a service result into the MCP envelope.
+ *
+ * Services return { success, response, errorResponse }; every tool handled that
+ * with the same if/else, so the shape is asserted in one place instead of ten.
+ */
+function unwrap(result: { success: boolean; response?: any; errorResponse?: any }): ToolResult {
+  return (result.success ? result.response : result.errorResponse) as ToolResult;
+}
+
+/**
+ * Options shared by both image-generation tools.
+ *
+ * generate_and_upload_image and generate_image accept an identical set of
+ * generation parameters and differ only in their destination field (fileName
+ * vs outputPath), so the schema is declared once and spread into both.
+ */
+const imageGenerationOptions = {
+  model: z.string().optional()
+    .describe("Optional: Override the default model. Use get_defaults to see available models"),
+
+  // Common parameters for both models
+  width: z.number().optional().default(1024).describe("Image width in pixels"),
+  height: z.number().optional().default(1024).describe("Image height in pixels"),
+  aspectRatio: z.string().optional().describe("Aspect ratio (e.g., '16:9', '4:3', '1:1'). If provided, overrides width and height"),
+  outputFormat: z.enum(["jpeg", "png", "webp"]).optional().default("png").describe("Output format"),
+  safetyTolerance: z.number().optional().default(2).describe("Safety tolerance (0-6)"),
+  seed: z.number().optional().describe("Random seed for reproducible generation"),
+  numInferenceSteps: z.number().optional().default(25).describe("Number of inference steps"),
+  guidanceScale: z.number().optional().default(7.5).describe("Guidance scale"),
+  negativePrompt: z.string().optional().default("low quality, bad quality, sketches").describe("Negative prompt"),
+
+  // Flux 1.1 Pro specific parameters
+  promptUpsampling: z.boolean().optional()
+    .describe("Enable prompt upsampling (Flux 1.1 Pro only)"),
+  outputQuality: z.number().optional()
+    .describe("Output quality 1-100 (Flux 1.1 Pro only)"),
+
+  // Flux 1.1 Pro Ultra specific parameters
+  raw: z.boolean().optional()
+    .describe("Generate less processed, more natural-looking images (Flux 1.1 Pro Ultra only)"),
+  imagePromptStrength: z.number().optional()
+    .describe("Image prompt strength 0-1 (Flux 1.1 Pro Ultra only)")
+} as const;
+
 /** Register every Printify tool and prompt on `server`. */
 export function registerTools(server: McpServer, ctx: PrintifyContext): void {
   // Get Printify status tool
@@ -66,12 +112,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       // Call the service
       const result = await getPrintifyStatus(ctx.printifyClient);
 
-      // Return the result
-      if (result.success) {
-        return result.response as { content: any[], isError?: boolean };
-      } else {
-        return result.errorResponse as { content: any[], isError: boolean };
-      }
+      return unwrap(result);
     }
   );
 
@@ -88,12 +129,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       // Call the service
       const result = await listPrintifyShops(ctx.printifyClient);
 
-      // Return the result
-      if (result.success) {
-        return result.response as { content: any[], isError?: boolean };
-      } else {
-        return result.errorResponse as { content: any[], isError: boolean };
-      }
+      return unwrap(result);
     }
   );
 
@@ -112,12 +148,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       // Call the service
       const result = await switchPrintifyShop(ctx.printifyClient, shopId);
 
-      // Return the result
-      if (result.success) {
-        return result.response as { content: any[], isError?: boolean };
-      } else {
-        return result.errorResponse as { content: any[], isError: boolean };
-      }
+      return unwrap(result);
     }
   );
 
@@ -139,12 +170,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       // Call the service
       const result = await listProducts(ctx.printifyClient, { page, limit });
 
-      // Return the result
-      if (result.success) {
-        return result.response as { content: any[], isError?: boolean };
-      } else {
-        return result.errorResponse as { content: any[], isError: boolean };
-      }
+      return unwrap(result);
     }
   );
 
@@ -163,12 +189,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       // Call the service
       const result = await getProduct(ctx.printifyClient, productId);
 
-      // Return the result
-      if (result.success) {
-        return result.response as { content: any[], isError?: boolean };
-      } else {
-        return result.errorResponse as { content: any[], isError: boolean };
-      }
+      return unwrap(result);
     }
   );
 
@@ -208,12 +229,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
         tags
       });
 
-      // Return the result
-      if (result.success) {
-        return result.response as { content: any[], isError?: boolean };
-      } else {
-        return result.errorResponse as { content: any[], isError: boolean };
-      }
+      return unwrap(result);
     }
   );
 
@@ -250,12 +266,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
         tags
       });
 
-      // Return the result
-      if (result.success) {
-        return result.response as { content: any[], isError?: boolean };
-      } else {
-        return result.errorResponse as { content: any[], isError: boolean };
-      }
+      return unwrap(result);
     }
   );
 
@@ -274,12 +285,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       // Call the service
       const result = await deleteProduct(ctx.printifyClient, productId);
 
-      // Return the result
-      if (result.success) {
-        return result.response as { content: any[], isError?: boolean };
-      } else {
-        return result.errorResponse as { content: any[], isError: boolean };
-      }
+      return unwrap(result);
     }
   );
 
@@ -305,12 +311,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       // Call the service
       const result = await publishProduct(ctx.printifyClient, productId, publishDetails);
 
-      // Return the result
-      if (result.success) {
-        return result.response as { content: any[], isError?: boolean };
-      } else {
-        return result.errorResponse as { content: any[], isError: boolean };
-      }
+      return unwrap(result);
     }
   );
 
@@ -330,12 +331,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       // Call the service
       const result = await getBlueprints(ctx.printifyClient, { page, limit });
 
-      // Return the result
-      if (result.success) {
-        return result.response as { content: any[], isError?: boolean };
-      } else {
-        return result.errorResponse as { content: any[], isError: boolean };
-      }
+      return unwrap(result);
     }
   );
 
@@ -354,12 +350,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       // Call the service
       const result = await getBlueprint(ctx.printifyClient, blueprintId);
 
-      // Return the result
-      if (result.success) {
-        return result.response as { content: any[], isError?: boolean };
-      } else {
-        return result.errorResponse as { content: any[], isError: boolean };
-      }
+      return unwrap(result);
     }
   );
 
@@ -378,12 +369,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       // Call the service
       const result = await getPrintProviders(ctx.printifyClient, blueprintId);
 
-      // Return the result
-      if (result.success) {
-        return result.response as { content: any[], isError?: boolean };
-      } else {
-        return result.errorResponse as { content: any[], isError: boolean };
-      }
+      return unwrap(result);
     }
   );
 
@@ -403,12 +389,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       // Call the service
       const result = await getVariants(ctx.printifyClient, blueprintId, printProviderId);
 
-      // Return the result
-      if (result.success) {
-        return result.response as { content: any[], isError?: boolean };
-      } else {
-        return result.errorResponse as { content: any[], isError: boolean };
-      }
+      return unwrap(result);
     }
   );
 
@@ -436,12 +417,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       // Call the service
       const result = await uploadImageToPrintify(ctx.printifyClient, fileName, url);
 
-      // Return the result
-      if (result.success) {
-        return result.response as { content: any[], isError?: boolean };
-      } else {
-        return result.errorResponse as { content: any[], isError: boolean };
-      }
+      return unwrap(result);
     }
   );
 
@@ -706,32 +682,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       prompt: z.string().describe("Text prompt for image generation"),
       fileName: z.string().describe("File name for the uploaded image"),
 
-      // Optional model override
-      model: z.string().optional()
-        .describe("Optional: Override the default model. Use get_defaults to see available models"),
-
-      // Common parameters for both models
-      width: z.number().optional().default(1024).describe("Image width in pixels"),
-      height: z.number().optional().default(1024).describe("Image height in pixels"),
-      aspectRatio: z.string().optional().describe("Aspect ratio (e.g., '16:9', '4:3', '1:1'). If provided, overrides width and height"),
-      outputFormat: z.enum(["jpeg", "png", "webp"]).optional().default("png").describe("Output format"),
-      safetyTolerance: z.number().optional().default(2).describe("Safety tolerance (0-6)"),
-      seed: z.number().optional().describe("Random seed for reproducible generation"),
-      numInferenceSteps: z.number().optional().default(25).describe("Number of inference steps"),
-      guidanceScale: z.number().optional().default(7.5).describe("Guidance scale"),
-      negativePrompt: z.string().optional().default("low quality, bad quality, sketches").describe("Negative prompt"),
-
-      // Flux 1.1 Pro specific parameters
-      promptUpsampling: z.boolean().optional()
-        .describe("Enable prompt upsampling (Flux 1.1 Pro only)"),
-      outputQuality: z.number().optional()
-        .describe("Output quality 1-100 (Flux 1.1 Pro only)"),
-
-      // Flux 1.1 Pro Ultra specific parameters
-      raw: z.boolean().optional()
-        .describe("Generate less processed, more natural-looking images (Flux 1.1 Pro Ultra only)"),
-      imagePromptStrength: z.number().optional()
-        .describe("Image prompt strength 0-1 (Flux 1.1 Pro Ultra only)")
+      ...imageGenerationOptions
     },
     async ({
       prompt, fileName, model, width, height, aspectRatio, outputFormat, safetyTolerance,
@@ -753,15 +704,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
         };
       }
 
-      if (!ctx.printifyClient) {
-        return {
-          content: [{
-            type: "text",
-            text: "Printify API client is not initialized. Set the PRINTIFY_API_KEY environment variable, or pass printifyApiKey to createPrintifyMcpServer()."
-          }],
-          isError: true
-        };
-      }
+      if (!printifyReady(ctx)) return printifyNotReady();
 
       // Check if we're using the Ultra model which requires ImgBB
       // Determine which model to use (user-specified or default)
@@ -804,37 +747,11 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
         ctx.replicateClient,
         prompt,
         fileName,
-        {
-          // Start with defaults
-          model: defaults.model,
-          width: defaults.width,
-          height: defaults.height,
-          aspectRatio: defaults.aspectRatio,
-          outputFormat: defaults.outputFormat,
-          safetyTolerance: defaults.safetyTolerance,
-          numInferenceSteps: defaults.numInferenceSteps,
-          guidanceScale: defaults.guidanceScale,
-          negativePrompt: defaults.negativePrompt,
-          raw: defaults.raw,
-          promptUpsampling: defaults.promptUpsampling,
-          outputQuality: defaults.outputQuality,
-
-          // Override with parameters from the tool call (if provided)
-          ...(model !== undefined && { model }),
-          ...(width !== undefined && { width }),
-          ...(height !== undefined && { height }),
-          ...(aspectRatio !== undefined && { aspectRatio }),
-          ...(outputFormat !== undefined && { outputFormat }),
-          ...(safetyTolerance !== undefined && { safetyTolerance }),
-          ...(seed !== undefined && { seed }),
-          ...(numInferenceSteps !== undefined && { numInferenceSteps }),
-          ...(guidanceScale !== undefined && { guidanceScale }),
-          ...(negativePrompt !== undefined && { negativePrompt }),
-          ...(promptUpsampling !== undefined && { promptUpsampling }),
-          ...(outputQuality !== undefined && { outputQuality }),
-          ...(raw !== undefined && { raw }),
-          ...(imagePromptStrength !== undefined && { imagePromptStrength })
-        }
+        mergeGenerationOptions(defaults, {
+          model, width, height, aspectRatio, outputFormat, safetyTolerance, seed,
+          numInferenceSteps, guidanceScale, negativePrompt, promptUpsampling,
+          outputQuality, raw, imagePromptStrength
+        })
       );
 
       // If image generation failed, return the error
@@ -1067,32 +984,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       prompt: z.string().describe("Text prompt for image generation"),
       outputPath: z.string().describe("Full path where the generated image should be saved"),
 
-      // Optional model override
-      model: z.string().optional()
-        .describe("Optional: Override the default model. Use get_defaults to see available models"),
-
-      // Common parameters for both models
-      width: z.number().optional().default(1024).describe("Image width in pixels"),
-      height: z.number().optional().default(1024).describe("Image height in pixels"),
-      aspectRatio: z.string().optional().describe("Aspect ratio (e.g., '16:9', '4:3', '1:1'). If provided, overrides width and height"),
-      outputFormat: z.enum(["jpeg", "png", "webp"]).optional().default("png").describe("Output format"),
-      safetyTolerance: z.number().optional().default(2).describe("Safety tolerance (0-6)"),
-      seed: z.number().optional().describe("Random seed for reproducible generation"),
-      numInferenceSteps: z.number().optional().default(25).describe("Number of inference steps"),
-      guidanceScale: z.number().optional().default(7.5).describe("Guidance scale"),
-      negativePrompt: z.string().optional().default("low quality, bad quality, sketches").describe("Negative prompt"),
-
-      // Flux 1.1 Pro specific parameters
-      promptUpsampling: z.boolean().optional()
-        .describe("Enable prompt upsampling (Flux 1.1 Pro only)"),
-      outputQuality: z.number().optional()
-        .describe("Output quality 1-100 (Flux 1.1 Pro only)"),
-
-      // Flux 1.1 Pro Ultra specific parameters
-      raw: z.boolean().optional()
-        .describe("Generate less processed, more natural-looking images (Flux 1.1 Pro Ultra only)"),
-      imagePromptStrength: z.number().optional()
-        .describe("Image prompt strength 0-1 (Flux 1.1 Pro Ultra only)")
+      ...imageGenerationOptions
     },
     async ({
       prompt, outputPath, model, width, height, aspectRatio, outputFormat, safetyTolerance,
@@ -1136,37 +1028,11 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
         ctx.replicateClient,
         prompt,
         fileName,
-        {
-          // Start with defaults
-          model: defaults.model,
-          width: defaults.width,
-          height: defaults.height,
-          aspectRatio: defaults.aspectRatio,
-          outputFormat: defaults.outputFormat,
-          safetyTolerance: defaults.safetyTolerance,
-          numInferenceSteps: defaults.numInferenceSteps,
-          guidanceScale: defaults.guidanceScale,
-          negativePrompt: defaults.negativePrompt,
-          raw: defaults.raw,
-          promptUpsampling: defaults.promptUpsampling,
-          outputQuality: defaults.outputQuality,
-
-          // Override with parameters from the tool call (if provided)
-          ...(model !== undefined && { model }),
-          ...(width !== undefined && { width }),
-          ...(height !== undefined && { height }),
-          ...(aspectRatio !== undefined && { aspectRatio }),
-          ...(outputFormat !== undefined && { outputFormat }),
-          ...(safetyTolerance !== undefined && { safetyTolerance }),
-          ...(seed !== undefined && { seed }),
-          ...(numInferenceSteps !== undefined && { numInferenceSteps }),
-          ...(guidanceScale !== undefined && { guidanceScale }),
-          ...(negativePrompt !== undefined && { negativePrompt }),
-          ...(promptUpsampling !== undefined && { promptUpsampling }),
-          ...(outputQuality !== undefined && { outputQuality }),
-          ...(raw !== undefined && { raw }),
-          ...(imagePromptStrength !== undefined && { imagePromptStrength })
-        }
+        mergeGenerationOptions(defaults, {
+          model, width, height, aspectRatio, outputFormat, safetyTolerance, seed,
+          numInferenceSteps, guidanceScale, negativePrompt, promptUpsampling,
+          outputQuality, raw, imagePromptStrength
+        })
       );
 
       // If image generation failed, return the error

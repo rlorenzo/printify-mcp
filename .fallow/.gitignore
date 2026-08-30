@@ -1,6 +1,1 @@
-# fallow regenerates this file; keep the baseline exceptions.
-# Analysis caches are machine-local, but *.baseline.json is committed so CI can
-# gate new findings against it.
 *
-!.gitignore
-!*.baseline.json

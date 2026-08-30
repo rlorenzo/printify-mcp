@@ -12,20 +12,26 @@
     },
     "src/model-manager.ts": {
       "complexity_critical": {
-        "count": 2
+        "count": 1
+      },
+      "complexity_high": {
+        "count": 1
       },
       "crap_critical": {
-        "count": 2
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
       }
     },
     "src/printify-api.ts": {
       "complexity_critical": {
-        "count": 2
+        "count": 1
+      },
+      "complexity_moderate": {
+        "count": 1
       },
       "crap_critical": {
-        "count": 3
-      },
-      "crap_high": {
         "count": 1
       },
       "crap_moderate": {
@@ -38,21 +44,13 @@
       },
       "crap_critical": {
         "count": 1
-      },
-      "crap_high": {
-        "count": 1
       }
     },
     "src/services/image-generator.ts": {
-      "complexity_critical": {
+      "complexity_high": {
         "count": 1
       },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "src/services/printify-blueprints.ts": {
-      "crap_moderate": {
+      "crap_high": {
         "count": 1
       }
     },
@@ -62,9 +60,6 @@
       },
       "crap_critical": {
         "count": 1
-      },
-      "crap_high": {
-        "count": 1
       }
     },
     "src/tools.ts": {
@@ -73,18 +68,15 @@
       },
       "crap_critical": {
         "count": 2
-      },
-      "crap_moderate": {
-        "count": 2
       }
     }
   },
   "runtime_coverage_findings": [],
   "target_keys": [
-    "src/replicate-client.ts:complexity",
     "src/printify-api.ts:complexity",
+    "src/replicate-client.ts:complexity",
+    "src/tools.ts:complexity",
     "src/services/image-generator.ts:complexity",
-    "src/services/printify-uploader.ts:complexity",
-    "src/tools.ts:complexity"
+    "src/services/printify-uploader.ts:complexity"
   ]
 }

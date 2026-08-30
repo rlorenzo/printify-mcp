@@ -21,10 +21,10 @@ export default defineConfig({
       // A floor, not a target: set to the level reached when tests were
       // introduced so coverage cannot regress. Raise it as suites are added.
       thresholds: {
-        statements: 7,
-        branches: 9,
-        functions: 16,
-        lines: 8
+        statements: 13,
+        branches: 12,
+        functions: 27,
+        lines: 14
       }
     }
   }
