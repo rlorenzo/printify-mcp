@@ -57,7 +57,6 @@ describe('createPrintifyMcpServer', () => {
   // Importing the library must not patch the consumer's console or start a
   // server; that regression is what moved the entry to exports.ts.
   it('does not patch console on import', () => {
-    expect(console.log).toBe(console.log);
     const before = console.log;
     createPrintifyMcpServer({ printifyApiKey: 'k' });
     expect(console.log).toBe(before);

@@ -433,7 +433,7 @@ If you prefer to run the server in a Docker container, you have two options:
 
 6. Test the connection by asking Claude to check the Printify status:
 
-```text
+   ```text
    Can you check the status of my Printify connection?
    ```
 
