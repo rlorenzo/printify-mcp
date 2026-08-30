@@ -18,10 +18,9 @@ A Model Context Protocol (MCP) server for integrating AI assistants with Printif
   - [Development Mode](#development-mode)
 - [Available Tools](#available-tools)
   - [Shop Management](#shop-management)
-  - [Product Management](#product-management)
-  - [Blueprint and Variant Management](#blueprint-and-variant-management)
-  - [Image Management](#image-management)
-  - [Documentation](#documentation)
+  - [Product Tools](#product-tools)
+  - [Catalog Tools](#catalog-tools)
+  - [Image Tools](#image-tools)
   - [Prompts](#prompts)
 - [Workflow Examples](#workflow-examples)
   - [Creating a T-Shirt with AI-Generated Design](#creating-a-t-shirt-with-ai-generated-design)
@@ -102,7 +101,7 @@ You have two options for configuring the environment variables needed by the ser
 
 1. Create a `.env` file in the root directory of the project with the following variables:
 
-```
+```dotenv
 # Required for all functionality
 PRINTIFY_API_KEY=your_printify_api_key
 
@@ -138,6 +137,7 @@ cp .env.example .env
 Alternatively, you can set these variables directly in your system environment:
 
 **Windows (Command Prompt):**
+
 ```cmd
 :: Required
 set PRINTIFY_API_KEY=your_printify_api_key
@@ -150,6 +150,7 @@ set REPLICATE_API_TOKEN=your_replicate_api_token
 ```
 
 **Windows (PowerShell):**
+
 ```powershell
 # Required
 $env:PRINTIFY_API_KEY = "your_printify_api_key"
@@ -162,6 +163,7 @@ $env:REPLICATE_API_TOKEN = "your_replicate_api_token"
 ```
 
 **macOS/Linux:**
+
 ```bash
 # Required
 export PRINTIFY_API_KEY=your_printify_api_key
@@ -237,6 +239,7 @@ There are three ways to use this MCP server with Claude Desktop:
 ### Option 1: Install from npm (Recommended)
 
 1. Install the package globally:
+
    ```bash
    npm install -g @tsavo/printify-mcp
    ```
@@ -254,7 +257,8 @@ There are three ways to use this MCP server with Claude Desktop:
    - Click "Add Server"
 
 4. Test the connection by asking Claude to check the Printify status:
-   ```
+
+```text
    Can you check the status of my Printify connection?
    ```
 
@@ -285,13 +289,15 @@ If you prefer to run the server in a Docker container, you have two options:
 1. Make sure you have Docker installed on your system
 
 2. Create a directory for your Printify MCP files:
+
    ```bash
    mkdir printify-mcp
    cd printify-mcp
    ```
 
 3. Create a `.env` file with your API keys:
-   ```
+
+```dotenv
    PRINTIFY_API_KEY=your_printify_api_key
    PRINTIFY_SHOP_ID=your_shop_id (optional)
    REPLICATE_API_TOKEN=your_replicate_api_token
@@ -299,6 +305,7 @@ If you prefer to run the server in a Docker container, you have two options:
    ```
 
 4. Create a temp directory for temporary files:
+
    ```bash
    mkdir temp
    ```
@@ -306,6 +313,7 @@ If you prefer to run the server in a Docker container, you have two options:
 5. Run the Docker container (two options):
 
    **Option A: Using environment variables directly (Recommended)**
+
    ```bash
    # For Linux/macOS/Windows PowerShell:
    docker run -it --name printify-mcp \
@@ -323,16 +331,19 @@ If you prefer to run the server in a Docker container, you have two options:
    ```
 
    **Note:** If you want to use the image generation features (generate-and-upload-image tool), add the Replicate API token:
+
    ```bash
    -e REPLICATE_API_TOKEN=your_replicate_api_token \
    ```
 
    **Important:** If you want to use the Flux 1.1 Pro Ultra model for image generation, you MUST also add the ImgBB API key:
+
    ```bash
    -e IMGBB_API_KEY=your_imgbb_api_key \
    ```
 
    **Option B: Using a .env file**
+
    ```bash
    # For Linux/macOS:
    docker run -it --name printify-mcp \
@@ -362,6 +373,7 @@ If you prefer to run the server in a Docker container, you have two options:
 1. Make sure you have Docker and Docker Compose installed on your system
 
 2. Clone this repository to your local machine:
+
    ```bash
    git clone https://github.com/tsavo/printify-mcp.git
    cd printify-mcp
@@ -371,6 +383,7 @@ If you prefer to run the server in a Docker container, you have two options:
 
    **Option A: Edit docker-compose.yml directly (Recommended)**
    Open docker-compose.yml and uncomment/edit the environment variables:
+
    ```yaml
    environment:
      - NODE_ENV=production
@@ -384,7 +397,8 @@ If you prefer to run the server in a Docker container, you have two options:
    ```
 
    **Option B: Create a `.env` file**
-   ```
+
+```dotenv
    PRINTIFY_API_KEY=your_printify_api_key
    PRINTIFY_SHOP_ID=your_shop_id (optional)
    # Optional: Only needed if you want to use image generation features
@@ -392,7 +406,9 @@ If you prefer to run the server in a Docker container, you have two options:
    # Required if using the Flux 1.1 Pro Ultra model for image generation
    IMGBB_API_KEY=your_imgbb_api_key
    ```
+
    Then uncomment the .env volume mount in docker-compose.yml:
+
    ```yaml
    volumes:
      # Option 2: Mount a .env file for environment variables
@@ -400,6 +416,7 @@ If you prefer to run the server in a Docker container, you have two options:
    ```
 
 4. Build and start the Docker container:
+
    ```bash
    docker-compose up -d
    ```
@@ -415,7 +432,8 @@ If you prefer to run the server in a Docker container, you have two options:
    - Click "Add Server"
 
 6. Test the connection by asking Claude to check the Printify status:
-   ```
+
+```text
    Can you check the status of my Printify connection?
    ```
 
@@ -424,12 +442,14 @@ If you prefer to run the server in a Docker container, you have two options:
 If you prefer to work with the source code directly without Docker:
 
 1. Clone this repository to your local machine:
+
    ```bash
    git clone https://github.com/tsavo/printify-mcp.git
    cd printify-mcp
    ```
 
 2. Install dependencies and build the project:
+
    ```bash
    npm install
    npm run build
@@ -440,12 +460,14 @@ If you prefer to work with the source code directly without Docker:
 4. Get the full absolute path to the compiled JavaScript file:
 
    **Windows:**
+
    ```cmd
    cd dist
    echo %CD%\index.js
    ```
 
    **macOS/Linux:**
+
    ```bash
    realpath dist/index.js
    ```
@@ -461,6 +483,7 @@ If you prefer to work with the source code directly without Docker:
    - Click "Add Server"
 
 6. Start the server:
+
    ```bash
    npm start
    ```
@@ -471,7 +494,7 @@ If you prefer to work with the source code directly without Docker:
 
 In a conversation with Claude, you can test if the server is working by asking Claude to check the Printify status:
 
-```
+```text
 Can you check the status of my Printify connection?
 ```
 
@@ -501,6 +524,7 @@ List all available shops in your Printify account. The currently selected shop i
 Switch to a different shop for subsequent API calls.
 
 Parameters:
+
 - `shopId` (string): The ID of the shop to switch to
 
 ### Product Tools
@@ -510,6 +534,7 @@ Parameters:
 List products in your Printify shop.
 
 Parameters:
+
 - `page` (number, optional): Page number (default: 1)
 - `limit` (number, optional): Number of products per page (default: 10)
 
@@ -518,6 +543,7 @@ Parameters:
 Get details of a specific product.
 
 Parameters:
+
 - `productId` (string): Product ID
 
 #### `create-product`
@@ -525,6 +551,7 @@ Parameters:
 Create a new product in your Printify shop.
 
 Parameters:
+
 - `title` (string): Product title
 - `description` (string): Product description
 - `blueprintId` (number): Blueprint ID
@@ -537,6 +564,7 @@ Parameters:
 Update an existing product in your Printify shop.
 
 Parameters:
+
 - `productId` (string): Product ID
 - `title` (string, optional): Product title
 - `description` (string, optional): Product description
@@ -548,6 +576,7 @@ Parameters:
 Delete a product from your Printify shop.
 
 Parameters:
+
 - `productId` (string): Product ID
 
 #### `publish-product`
@@ -555,6 +584,7 @@ Parameters:
 Publish a product to your connected sales channel.
 
 Parameters:
+
 - `productId` (string): Product ID
 - `publishDetails` (object, optional): Publish details
 
@@ -565,6 +595,7 @@ Parameters:
 Get a list of available blueprints from the Printify catalog.
 
 Parameters:
+
 - `page` (number, optional): Page number (default: 1)
 - `limit` (number, optional): Number of blueprints per page (default: 10)
 
@@ -573,6 +604,7 @@ Parameters:
 Get details of a specific blueprint.
 
 Parameters:
+
 - `blueprintId` (string): Blueprint ID
 
 #### `get-print-providers`
@@ -580,6 +612,7 @@ Parameters:
 Get a list of print providers for a specific blueprint.
 
 Parameters:
+
 - `blueprintId` (string): Blueprint ID
 
 #### `get-variants`
@@ -587,6 +620,7 @@ Parameters:
 Get a list of variants for a specific blueprint and print provider.
 
 Parameters:
+
 - `blueprintId` (string): Blueprint ID
 - `printProviderId` (string): Print provider ID
 
@@ -597,12 +631,14 @@ Parameters:
 Generate an image using Replicate's Flux models, process it with Sharp, and upload it to Printify in one operation. This tool combines AI image generation with Printify integration for a seamless workflow.
 
 The tool performs four steps:
+
 1. Generates an image using Replicate's Flux models based on your text prompt
 2. Processes the image with Sharp to ensure it's a valid image with the correct format for Printify
 3. Uploads the processed image to your Printify account
 4. Cleans up temporary files to avoid disk space issues
 
 Parameters:
+
 - `prompt` (string): Text prompt for image generation
 - `fileName` (string): File name for the uploaded image
 - `model` (string, optional): Override the default model (e.g., "black-forest-labs/flux-1.1-pro-ultra")
@@ -625,6 +661,7 @@ Parameters:
 Generate an image using Replicate's Flux models and save it to a local file without uploading to Printify. This tool is useful when you want to generate images for other purposes or when you want to review and potentially edit images before uploading them to Printify.
 
 Parameters:
+
 - `prompt` (string): Text prompt for image generation
 - `outputPath` (string): Full path where the generated image should be saved
 - `model` (string, optional): Override the default model (e.g., "black-forest-labs/flux-1.1-pro-ultra")
@@ -645,11 +682,13 @@ Unlike the `generate-and-upload-image` tool, this tool doesn't require the ImgBB
 #### `upload-image`
 
 Upload an image to your Printify account. Supports three types of inputs:
+
 1. URLs (http:// or https://) - Direct upload to Printify
 2. Local file paths (e.g., c:\path\to\image.png) - Automatically converted using Sharp to ensure compatibility, then uploaded to Printify
 3. Base64 encoded image strings - Direct upload to Printify
 
 **Note on file formats:**
+
 - Supported formats: PNG, JPEG, and SVG
 - Recommended resolution for JPEG/PNG files is 300 DPI
 - For larger products (leggings, blankets, tapestries), 120-150 DPI is acceptable
@@ -657,6 +696,7 @@ Upload an image to your Printify account. Supports three types of inputs:
 - For files larger than 5MB, URL upload is recommended over base64 encoding
 
 Parameters:
+
 - `fileName` (string): File name
 - `url` (string): URL of the image to upload, path to local file, or base64 encoded image data
 
@@ -667,6 +707,7 @@ Parameters:
 Generate a compelling product description.
 
 Parameters:
+
 - `productName` (string): Name of the product
 - `category` (string): Product category
 - `targetAudience` (string, optional): Target audience for the product
@@ -684,7 +725,7 @@ To use the Printify features of this MCP server, you'll need a Printify API key.
 4. Store your API key securely, as it will only be visible immediately after generation
 5. Create a `.env` file in the project root with the following content:
 
-   ```
+```dotenv
    PRINTIFY_API_KEY=your_api_key_here
    # Optional: Set a default shop ID
    # PRINTIFY_SHOP_ID=your_shop_id_here
@@ -854,16 +895,19 @@ The Docker setup consists of the following components:
 You can publish the Docker image to Docker Hub or any other container registry to make it available to others without requiring them to install Node.js or clone the repository.
 
 1. **Build the Docker image**:
+
    ```bash
    docker build -t tsavo/printify-mcp:latest .
    ```
 
 2. **Log in to Docker Hub**:
+
    ```bash
    docker login
    ```
 
 3. **Push the image to Docker Hub**:
+
    ```bash
    docker push tsavo/printify-mcp:latest
    ```
@@ -875,6 +919,7 @@ Users can run the Printify MCP server without installing Node.js by using the Do
 1. **Install Docker**: Users need to have Docker installed on their system
 
 2. **Create a temp directory** for temporary files:
+
    ```bash
    mkdir -p temp
    ```
@@ -882,6 +927,7 @@ Users can run the Printify MCP server without installing Node.js by using the Do
 3. **Run the Docker container** (two options):
 
    **Option A: Using environment variables directly (Recommended)**
+
    ```bash
    docker run -it --name printify-mcp \
      -e PRINTIFY_API_KEY=their_printify_api_key \
@@ -891,18 +937,21 @@ Users can run the Printify MCP server without installing Node.js by using the Do
    ```
 
    **Note:** If they want to use the image generation features (generate-and-upload-image tool), add the Replicate API token:
+
    ```bash
    -e REPLICATE_API_TOKEN=their_replicate_api_token \
    ```
 
    **Important:** If they want to use the Flux 1.1 Pro Ultra model for image generation, they MUST also add the ImgBB API key:
+
    ```bash
    -e IMGBB_API_KEY=their_imgbb_api_key \
    ```
 
    **Option B: Using a .env file**
    First, create a .env file with their API keys:
-   ```
+
+```dotenv
    PRINTIFY_API_KEY=their_printify_api_key
    PRINTIFY_SHOP_ID=their_shop_id (optional)
    # Optional: Only needed if they want to use image generation features
@@ -912,6 +961,7 @@ Users can run the Printify MCP server without installing Node.js by using the Do
    ```
 
    Then run the container:
+
    ```bash
    docker run -it --name printify-mcp \
      -v $(pwd)/.env:/app/.env:ro \
@@ -933,7 +983,7 @@ This approach allows users to run the Printify MCP server without installing Nod
 
 ### File Structure
 
-```
+```text
 printify-mcp/
 ├── dist/                  # Compiled JavaScript files
 ├── docs/                  # Documentation
@@ -1013,12 +1063,14 @@ If you're using the Docker setup and encounter issues:
 5. **Image not found**: If using the Docker Hub image directly, make sure you've pulled it with `docker pull tsavo/printify-mcp:latest`
 
 To restart the Docker container when using docker-compose:
+
 ```bash
 docker-compose down
 docker-compose up -d
 ```
 
 To restart the Docker container when using docker run:
+
 ```bash
 docker stop printify-mcp
 docker rm printify-mcp
@@ -1026,11 +1078,13 @@ docker run -it --name printify-mcp -v $(pwd)/.env:/app/.env:ro -v $(pwd)/temp:/a
 ```
 
 For Windows users using PowerShell with the Docker image directly:
+
 ```powershell
 docker run -it --name printify-mcp -v ${PWD}/.env:/app/.env:ro -v ${PWD}/temp:/app/temp tsavo/printify-mcp:latest
 ```
 
 For Windows users using Command Prompt with the Docker image directly:
+
 ```cmd
 docker run -it --name printify-mcp -v %cd%/.env:/app/.env:ro -v %cd%/temp:/app/temp tsavo/printify-mcp:latest
 ```
@@ -1040,11 +1094,13 @@ docker run -it --name printify-mcp -v %cd%/.env:/app/.env:ro -v %cd%/temp:/app/t
 The server includes detailed logging to help troubleshoot issues. Check the console output for error messages and debugging information.
 
 For Docker deployments, you can view logs with:
+
 ```bash
 docker logs printify-mcp
 ```
 
 To follow the logs in real-time:
+
 ```bash
 docker logs -f printify-mcp
 ```

@@ -11,6 +11,29 @@ export interface PrintifyShop {
 }
 
 // Printify API client
+/**
+ * Build one Printify print-area entry: the given variants plus a centred,
+ * unrotated, unscaled placeholder per position.
+ *
+ * Shared by product creation and update, which format print areas identically;
+ * they differ only in whether the entry is appended or replaces the list.
+ */
+function buildPrintAreaEntry(variantIds: any[], printAreasData: Record<string, any>): any {
+  return {
+    variant_ids: variantIds,
+    placeholders: Object.values(printAreasData).map((area: any) => ({
+      position: area.position,
+      images: [{
+        id: area.image_id || area.imageId,
+        x: 0.5,
+        y: 0.5,
+        scale: 1,
+        angle: 0
+      }]
+    }))
+  };
+}
+
 export class PrintifyAPI {
   private client: any;
   private apiToken: string;
@@ -227,30 +250,7 @@ export class PrintifyAPI {
         const variantIds = formattedData.variants.map((v: any) => v.id);
 
         // Create a print area entry with all variants
-        const printAreaEntry: any = {
-          variant_ids: variantIds,
-          placeholders: []
-        };
-
-        // Add placeholders for each position (front, back, etc.)
-        for (const key in printAreasData) {
-          const area = printAreasData[key];
-          printAreaEntry.placeholders.push({
-            position: area.position,
-            images: [
-              {
-                id: area.image_id || area.imageId,
-                x: 0.5,
-                y: 0.5,
-                scale: 1,
-                angle: 0
-              }
-            ]
-          });
-        }
-
-        // Add the print area entry to the formatted data
-        formattedData.print_areas.push(printAreaEntry);
+        formattedData.print_areas.push(buildPrintAreaEntry(variantIds, printAreasData));
       }
 
       console.error(`Creating product with shop ID: ${this.shopId}`);
@@ -318,30 +318,7 @@ export class PrintifyAPI {
           }
 
           // Create a print area entry with all variants
-          const printAreaEntry: any = {
-            variant_ids: variantIds,
-            placeholders: []
-          };
-
-          // Add placeholders for each position (front, back, etc.)
-          for (const key in printAreasData) {
-            const area = printAreasData[key];
-            printAreaEntry.placeholders.push({
-              position: area.position,
-              images: [
-                {
-                  id: area.image_id || area.imageId,
-                  x: 0.5,
-                  y: 0.5,
-                  scale: 1,
-                  angle: 0
-                }
-              ]
-            });
-          }
-
-          // Replace the print_areas with the correctly formatted version
-          formattedData.print_areas = [printAreaEntry];
+          formattedData.print_areas = [buildPrintAreaEntry(variantIds, printAreasData)];
 
           // Remove the printAreas property if it exists
           if (formattedData.printAreas) {

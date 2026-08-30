@@ -5,6 +5,24 @@
 /**
  * Format an error response for tool output
  */
+/**
+ * Render a key/value map as markdown bullets.
+ *
+ * Strings that already contain quotes are emitted verbatim so pre-quoted values
+ * are not double-quoted; objects are JSON-encoded; everything else is quoted.
+ */
+function formatFields(fields: Record<string, any>): string {
+  return Object.entries(fields).map(([key, value]) => {
+    if (typeof value === 'string' && value.includes('"')) {
+      return `- **${key}**: ${value}\n`;
+    }
+    if (typeof value === 'object') {
+      return `- **${key}**: ${JSON.stringify(value)}\n`;
+    }
+    return `- **${key}**: "${value}"\n`;
+  }).join('');
+}
+
 export function formatErrorResponse(
   error: any,
   step: string,
@@ -20,15 +38,7 @@ export function formatErrorResponse(
   let text = `❌ **Error in ${step}**\n\n`;
   
   // Add context information
-  Object.entries(context).forEach(([key, value]) => {
-    if (typeof value === 'string' && value.includes('"')) {
-      text += `- **${key}**: ${value}\n`;
-    } else if (typeof value === 'object') {
-      text += `- **${key}**: ${JSON.stringify(value)}\n`;
-    } else {
-      text += `- **${key}**: "${value}"\n`;
-    }
-  });
+  text += formatFields(context);
   
   text += `- **Error**: ${errorMessage}\n\n`;
   
@@ -80,15 +90,7 @@ export function formatSuccessResponse(
   let text = `✅ **${title}**\n\n`;
   
   // Add data information
-  Object.entries(data).forEach(([key, value]) => {
-    if (typeof value === 'string' && value.includes('"')) {
-      text += `- **${key}**: ${value}\n`;
-    } else if (typeof value === 'object') {
-      text += `- **${key}**: ${JSON.stringify(value)}\n`;
-    } else {
-      text += `- **${key}**: "${value}"\n`;
-    }
-  });
+  text += formatFields(data);
   
   // Add additional text if provided
   if (additionalText) {

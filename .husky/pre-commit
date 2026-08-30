@@ -1,0 +1,6 @@
+# Fast checks only — the full build/test matrix runs in CI.
+npx lint-staged
+
+# Regression gate: fails on dead code, duplication or complexity that THIS
+# change introduces. Pre-existing findings are inherited and do not block.
+npx fallow audit --format compact

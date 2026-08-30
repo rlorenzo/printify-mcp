@@ -1,0 +1,30 @@
+{
+  // This file is JSONC: fallow reads these comments; generic JSON tools may not.
+  "$schema": "./node_modules/fallow/schema.json",
+
+  // Both entrypoints matter: index.ts is the CLI, exports.ts is the library
+  // surface. Omitting exports.ts would report the whole public API as dead.
+  "entry": [
+    "src/index.ts",
+    "src/exports.ts"
+  ],
+
+  "duplicates": {
+    // Report every duplicated pair. The default of 3 hides two-instance clones,
+    // which are exactly what the regression gate should stop from accumulating.
+    "minOccurrences": 2
+  },
+
+  "rules": {
+    // Imports missing from package.json resolve only through a transitive dep
+    // and break silently when that dep changes its own tree.
+    "unused-dependencies": "error"
+  },
+
+  "audit": {
+    // Fail only on findings the changeset introduces. Existing complexity and
+    // duplication are frozen by the committed baselines rather than blocking
+    // every unrelated PR.
+    "gate": "new-only"
+  }
+}

@@ -23,6 +23,34 @@ export interface PrintifyContext {
   replicateClient: ReplicateClient | null;
 }
 
+type ToolResult = { content: any[]; isError?: boolean };
+
+/** A context whose Printify client is known to be configured. */
+type ReadyContext = PrintifyContext & { printifyClient: PrintifyAPI };
+
+/**
+ * Type predicate so a tool body can use `ctx.printifyClient` without a non-null
+ * assertion after the guard.
+ */
+function printifyReady(ctx: PrintifyContext): ctx is ReadyContext {
+  return ctx.printifyClient !== null;
+}
+
+/**
+ * The error result for tools that need a configured Printify client. Returned
+ * rather than thrown so the failure stays inside the MCP result envelope
+ * instead of surfacing as a transport error.
+ */
+function printifyNotReady(): ToolResult {
+  return {
+    content: [{
+      type: "text",
+      text: "Printify API client is not initialized. Set the PRINTIFY_API_KEY environment variable, or pass printifyApiKey to createPrintifyMcpServer()."
+    }],
+    isError: true
+  };
+}
+
 /** Register every Printify tool and prompt on `server`. */
 export function registerTools(server: McpServer, ctx: PrintifyContext): void {
   // Get Printify status tool
@@ -33,16 +61,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       // Import the printify shops service
       const { getPrintifyStatus } = await import('./services/printify-shops.js');
 
-      // Check if client is initialized
-      if (!ctx.printifyClient) {
-        return {
-          content: [{
-            type: "text",
-            text: "Printify API client is not initialized. Set the PRINTIFY_API_KEY environment variable, or pass printifyApiKey to createPrintifyMcpServer()."
-          }],
-          isError: true
-        };
-      }
+      if (!printifyReady(ctx)) return printifyNotReady();
 
       // Call the service
       const result = await getPrintifyStatus(ctx.printifyClient);
@@ -64,16 +83,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       // Import the printify shops service
       const { listPrintifyShops } = await import('./services/printify-shops.js');
 
-      // Check if client is initialized
-      if (!ctx.printifyClient) {
-        return {
-          content: [{
-            type: "text",
-            text: "Printify API client is not initialized. Set the PRINTIFY_API_KEY environment variable, or pass printifyApiKey to createPrintifyMcpServer()."
-          }],
-          isError: true
-        };
-      }
+      if (!printifyReady(ctx)) return printifyNotReady();
 
       // Call the service
       const result = await listPrintifyShops(ctx.printifyClient);
@@ -97,16 +107,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       // Import the printify shops service
       const { switchPrintifyShop } = await import('./services/printify-shops.js');
 
-      // Check if client is initialized
-      if (!ctx.printifyClient) {
-        return {
-          content: [{
-            type: "text",
-            text: "Printify API client is not initialized. Set the PRINTIFY_API_KEY environment variable, or pass printifyApiKey to createPrintifyMcpServer()."
-          }],
-          isError: true
-        };
-      }
+      if (!printifyReady(ctx)) return printifyNotReady();
 
       // Call the service
       const result = await switchPrintifyShop(ctx.printifyClient, shopId);
@@ -133,16 +134,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       // Import the printify products service
       const { listProducts } = await import('./services/printify-products.js');
 
-      // Check if client is initialized
-      if (!ctx.printifyClient) {
-        return {
-          content: [{
-            type: "text",
-            text: "Printify API client is not initialized. Set the PRINTIFY_API_KEY environment variable, or pass printifyApiKey to createPrintifyMcpServer()."
-          }],
-          isError: true
-        };
-      }
+      if (!printifyReady(ctx)) return printifyNotReady();
 
       // Call the service
       const result = await listProducts(ctx.printifyClient, { page, limit });
@@ -166,16 +158,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       // Import the printify products service
       const { getProduct } = await import('./services/printify-products.js');
 
-      // Check if client is initialized
-      if (!ctx.printifyClient) {
-        return {
-          content: [{
-            type: "text",
-            text: "Printify API client is not initialized. Set the PRINTIFY_API_KEY environment variable, or pass printifyApiKey to createPrintifyMcpServer()."
-          }],
-          isError: true
-        };
-      }
+      if (!printifyReady(ctx)) return printifyNotReady();
 
       // Call the service
       const result = await getProduct(ctx.printifyClient, productId);
@@ -212,16 +195,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       // Import the printify products service
       const { createProduct } = await import('./services/printify-products.js');
 
-      // Check if client is initialized
-      if (!ctx.printifyClient) {
-        return {
-          content: [{
-            type: "text",
-            text: "Printify API client is not initialized. Set the PRINTIFY_API_KEY environment variable, or pass printifyApiKey to createPrintifyMcpServer()."
-          }],
-          isError: true
-        };
-      }
+      if (!printifyReady(ctx)) return printifyNotReady();
 
       // Call the service
       const result = await createProduct(ctx.printifyClient, {
@@ -265,16 +239,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       // Import the printify products service
       const { updateProduct } = await import('./services/printify-products.js');
 
-      // Check if client is initialized
-      if (!ctx.printifyClient) {
-        return {
-          content: [{
-            type: "text",
-            text: "Printify API client is not initialized. Set the PRINTIFY_API_KEY environment variable, or pass printifyApiKey to createPrintifyMcpServer()."
-          }],
-          isError: true
-        };
-      }
+      if (!printifyReady(ctx)) return printifyNotReady();
 
       // Call the service
       const result = await updateProduct(ctx.printifyClient, productId, {
@@ -304,16 +269,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       // Import the printify products service
       const { deleteProduct } = await import('./services/printify-products.js');
 
-      // Check if client is initialized
-      if (!ctx.printifyClient) {
-        return {
-          content: [{
-            type: "text",
-            text: "Printify API client is not initialized. Set the PRINTIFY_API_KEY environment variable, or pass printifyApiKey to createPrintifyMcpServer()."
-          }],
-          isError: true
-        };
-      }
+      if (!printifyReady(ctx)) return printifyNotReady();
 
       // Call the service
       const result = await deleteProduct(ctx.printifyClient, productId);
@@ -344,16 +300,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       // Import the printify products service
       const { publishProduct } = await import('./services/printify-products.js');
 
-      // Check if client is initialized
-      if (!ctx.printifyClient) {
-        return {
-          content: [{
-            type: "text",
-            text: "Printify API client is not initialized. Set the PRINTIFY_API_KEY environment variable, or pass printifyApiKey to createPrintifyMcpServer()."
-          }],
-          isError: true
-        };
-      }
+      if (!printifyReady(ctx)) return printifyNotReady();
 
       // Call the service
       const result = await publishProduct(ctx.printifyClient, productId, publishDetails);
@@ -378,16 +325,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       // Import the printify blueprints service
       const { getBlueprints } = await import('./services/printify-blueprints.js');
 
-      // Check if client is initialized
-      if (!ctx.printifyClient) {
-        return {
-          content: [{
-            type: "text",
-            text: "Printify API client is not initialized. Set the PRINTIFY_API_KEY environment variable, or pass printifyApiKey to createPrintifyMcpServer()."
-          }],
-          isError: true
-        };
-      }
+      if (!printifyReady(ctx)) return printifyNotReady();
 
       // Call the service
       const result = await getBlueprints(ctx.printifyClient, { page, limit });
@@ -411,16 +349,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       // Import the printify blueprints service
       const { getBlueprint } = await import('./services/printify-blueprints.js');
 
-      // Check if client is initialized
-      if (!ctx.printifyClient) {
-        return {
-          content: [{
-            type: "text",
-            text: "Printify API client is not initialized. Set the PRINTIFY_API_KEY environment variable, or pass printifyApiKey to createPrintifyMcpServer()."
-          }],
-          isError: true
-        };
-      }
+      if (!printifyReady(ctx)) return printifyNotReady();
 
       // Call the service
       const result = await getBlueprint(ctx.printifyClient, blueprintId);
@@ -444,16 +373,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       // Import the printify blueprints service
       const { getPrintProviders } = await import('./services/printify-blueprints.js');
 
-      // Check if client is initialized
-      if (!ctx.printifyClient) {
-        return {
-          content: [{
-            type: "text",
-            text: "Printify API client is not initialized. Set the PRINTIFY_API_KEY environment variable, or pass printifyApiKey to createPrintifyMcpServer()."
-          }],
-          isError: true
-        };
-      }
+      if (!printifyReady(ctx)) return printifyNotReady();
 
       // Call the service
       const result = await getPrintProviders(ctx.printifyClient, blueprintId);
@@ -478,16 +398,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       // Import the printify blueprints service
       const { getVariants } = await import('./services/printify-blueprints.js');
 
-      // Check if client is initialized
-      if (!ctx.printifyClient) {
-        return {
-          content: [{
-            type: "text",
-            text: "Printify API client is not initialized. Set the PRINTIFY_API_KEY environment variable, or pass printifyApiKey to createPrintifyMcpServer()."
-          }],
-          isError: true
-        };
-      }
+      if (!printifyReady(ctx)) return printifyNotReady();
 
       // Call the service
       const result = await getVariants(ctx.printifyClient, blueprintId, printProviderId);
@@ -512,16 +423,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       // Import the printify uploader service
       const { uploadImageToPrintify, determineImageSourceType } = await import('./services/printify-uploader.js');
 
-      // Check if client is initialized
-      if (!ctx.printifyClient) {
-        return {
-          content: [{
-            type: "text",
-            text: "Printify API client is not initialized. Set the PRINTIFY_API_KEY environment variable, or pass printifyApiKey to createPrintifyMcpServer()."
-          }],
-          isError: true
-        };
-      }
+      if (!printifyReady(ctx)) return printifyNotReady();
 
       // Log the attempt with limited information for privacy
       const sourceType = determineImageSourceType(url);

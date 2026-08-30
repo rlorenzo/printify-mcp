@@ -18,7 +18,6 @@
   "files": [
     "dist",
     "src/docs",
-    "index.js",
     "README.md",
     "LICENSE"
   ],
@@ -27,11 +26,20 @@
     "copy-docs": "node -e \"const fs = require('fs'); const path = require('path'); if (!fs.existsSync('dist/docs')) fs.mkdirSync('dist/docs', { recursive: true }); fs.readdirSync('src/docs').forEach(file => fs.copyFileSync(path.join('src/docs', file), path.join('dist/docs', file)));\"",
     "start": "node dist/index.js",
     "dev": "tsc -w & node --watch dist/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest run",
     "prepublishOnly": "npm run build",
-    "lint": "eslint src",
+    "lint": "oxlint",
     "clean": "rimraf dist",
-    "prebuild": "npm run clean"
+    "prebuild": "npm run clean",
+    "lint:md": "markdownlint-cli2",
+    "lint:all": "npm run lint && npm run lint:md",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "analyze": "fallow",
+    "analyze:gate": "fallow audit --format compact",
+    "analyze:baseline": "fallow dead-code --save-baseline .fallow/dead-code.baseline.json && fallow health --save-baseline .fallow/health.baseline.json && fallow dupes --save-baseline .fallow/dupes.baseline.json",
+    "verify": "npm run build && npm run lint:all && npm test",
+    "prepare": "husky"
   },
   "keywords": [
     "mcp",
@@ -58,7 +66,9 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "axios": "^1.20.0",
     "dotenv": "^17.4.2",
+    "form-data": "^4.0.6",
     "printify-sdk-js": "^1.4.0",
     "replicate": "^1.4.0",
     "sharp": "^0.35.4",
@@ -67,10 +77,25 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.4.0",
+    "@vitest/coverage-v8": "^4.1.11",
     "eslint": "^10.9.1",
+    "fallow": "^3.20.0",
     "globals": "^17.11.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.4.1",
+    "markdownlint-cli2": "^0.23.2",
+    "oxlint": "^1.80.0",
     "rimraf": "^6.1.3",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.68.0"
+    "typescript-eslint": "^8.68.0",
+    "vitest": "^4.1.11"
+  },
+  "lint-staged": {
+    "*.{ts,js}": [
+      "oxlint --fix"
+    ],
+    "*.md": [
+      "markdownlint-cli2 --fix"
+    ]
   }
 }

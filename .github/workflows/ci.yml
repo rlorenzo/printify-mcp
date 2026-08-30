@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Build, lint and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Lint (oxlint)
+        run: npm run lint
+
+      - name: Lint (markdown)
+        run: npm run lint:md
+
+      # Integration tests spawn the built server, so this must follow the build.
+      - name: Test
+        run: npm run test:coverage
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
+
+  gate:
+    name: Regression gate (fallow)
+    runs-on: ubuntu-latest
+    steps:
+      # The gate diffs against the merge-base, so it needs full history.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # Fails only on dead code, duplication or complexity introduced by this
+      # change. Pre-existing findings are inherited from the committed baselines
+      # and do not block unrelated work.
+      - name: Audit changed files
+        run: npx fallow audit --format github-annotations --gate new-only
+
+      - name: Job summary
+        if: always()
+        run: npx fallow audit --format github-summary >> "$GITHUB_STEP_SUMMARY"
