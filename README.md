@@ -207,6 +207,29 @@ npm run dev
 
 This will start the server in development mode with automatic reloading when files change.
 
+### Using as a library
+
+Importing the package gives you the server factory and the underlying clients. It
+does not start a server or touch your stdio, so you choose the transport:
+
+```js
+import { createPrintifyMcpServer } from '@tsavo/printify-mcp';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+
+const { server, initialize } = createPrintifyMcpServer({
+  printifyApiKey: process.env.PRINTIFY_API_KEY,
+});
+
+await initialize();                 // fetch shops, select the default
+await server.connect(new StdioServerTransport());
+```
+
+`createPrintifyMcpServer()` returns the `server` with all tools and prompts
+registered, the `printifyClient` and `replicateClient`, and an `initialize()`
+that connects to Printify and selects a shop. The `PrintifyAPI` and
+`ReplicateClient` classes are also exported if you want to use them directly
+without an MCP server.
+
 ## Using with Claude Desktop
 
 There are three ways to use this MCP server with Claude Desktop:
