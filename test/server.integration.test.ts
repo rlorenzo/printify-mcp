@@ -46,6 +46,9 @@ function rpc(requests: object[], timeoutMs = 6000): Promise<{ stdout: string; fr
     // sent, so the session is driven by the frames that arrive rather than by a
     // fixed delay a slow machine can outrun.
     child.stdout.on('data', (d) => {
+      // stdin is already ended once shutdown() runs, so a late frame taking the
+      // handshake branch below would write to a closed pipe and fail the worker.
+      if (closing) return;
       stdout += d;
       const frames = parseFrames(stdout);
 
