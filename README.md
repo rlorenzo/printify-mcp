@@ -101,29 +101,29 @@ You have two options for configuring the environment variables needed by the ser
 
 1. Create a `.env` file in the root directory of the project with the following variables:
 
-```dotenv
-# Required for all functionality
-PRINTIFY_API_KEY=your_printify_api_key
+   ```dotenv
+   # Required for all functionality
+   PRINTIFY_API_KEY=your_printify_api_key
 
-# Required if using the Flux 1.1 Pro Ultra model for image generation
-# The Ultra model generates high-resolution images that are too large for direct base64 upload
-IMGBB_API_KEY=your_imgbb_api_key
+   # Required if using the Flux 1.1 Pro Ultra model for image generation
+   # The Ultra model generates high-resolution images that are too large for direct base64 upload
+   IMGBB_API_KEY=your_imgbb_api_key
 
-# Optional: If not provided, the first shop in your account will be used
-PRINTIFY_SHOP_ID=your_shop_id
+   # Optional: If not provided, the first shop in your account will be used
+   PRINTIFY_SHOP_ID=your_shop_id
 
-# Optional: Only needed if you want to use image generation features
-REPLICATE_API_TOKEN=your_replicate_api_token
+   # Optional: Only needed if you want to use image generation features
+   REPLICATE_API_TOKEN=your_replicate_api_token
 
-# Optional: Directory that local image uploads are restricted to.
-# Defaults to the working directory. Uploads resolving outside it are refused,
-# so set this if your images live elsewhere (e.g. ~/Pictures).
-ALLOWED_FILE_DIR=/path/to/your/images
+   # Optional: Directory that local image uploads are restricted to.
+   # Defaults to the working directory. Uploads resolving outside it are refused,
+   # so set this if your images live elsewhere (e.g. ~/Pictures).
+   ALLOWED_FILE_DIR=/path/to/your/images
 
-# Optional: Set to any value to keep a copy of every generated or uploaded
-# image under ./debug for troubleshooting. Off by default.
-PRINTIFY_MCP_DEBUG=1
-```
+   # Optional: Set to any value to keep a copy of every generated or uploaded
+   # image under ./debug for troubleshooting. Off by default.
+   PRINTIFY_MCP_DEBUG=1
+   ```
 
 You can use the `.env.example` file as a template by copying it:
 
@@ -258,7 +258,7 @@ There are three ways to use this MCP server with Claude Desktop:
 
 4. Test the connection by asking Claude to check the Printify status:
 
-```text
+   ```text
    Can you check the status of my Printify connection?
    ```
 
@@ -297,7 +297,7 @@ If you prefer to run the server in a Docker container, you have two options:
 
 3. Create a `.env` file with your API keys:
 
-```dotenv
+   ```dotenv
    PRINTIFY_API_KEY=your_printify_api_key
    PRINTIFY_SHOP_ID=your_shop_id (optional)
    REPLICATE_API_TOKEN=your_replicate_api_token
@@ -398,7 +398,7 @@ If you prefer to run the server in a Docker container, you have two options:
 
    **Option B: Create a `.env` file**
 
-```dotenv
+   ```dotenv
    PRINTIFY_API_KEY=your_printify_api_key
    PRINTIFY_SHOP_ID=your_shop_id (optional)
    # Optional: Only needed if you want to use image generation features
@@ -725,7 +725,7 @@ To use the Printify features of this MCP server, you'll need a Printify API key.
 4. Store your API key securely, as it will only be visible immediately after generation
 5. Create a `.env` file in the project root with the following content:
 
-```dotenv
+   ```dotenv
    PRINTIFY_API_KEY=your_api_key_here
    # Optional: Set a default shop ID
    # PRINTIFY_SHOP_ID=your_shop_id_here
@@ -951,7 +951,7 @@ Users can run the Printify MCP server without installing Node.js by using the Do
    **Option B: Using a .env file**
    First, create a .env file with their API keys:
 
-```dotenv
+   ```dotenv
    PRINTIFY_API_KEY=their_printify_api_key
    PRINTIFY_SHOP_ID=their_shop_id (optional)
    # Optional: Only needed if they want to use image generation features

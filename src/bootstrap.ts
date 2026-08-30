@@ -14,6 +14,9 @@ import type { PrintifyContext } from './tools.js';
  * Never throws: a missing key or an unreachable Printify leaves the relevant
  * client null, and the tools report that clearly per call rather than the
  * server failing to start.
+ *
+ * The two clients are initialized independently so a Printify outage cannot
+ * take the Replicate-backed image tools down with it.
  */
 export async function initializeClients(
   ctx: PrintifyContext,
@@ -40,7 +43,11 @@ export async function initializeClients(
         console.error('Printify SDK client initialized, but no shops were found in your account.');
       }
     }
+  } catch (error) {
+    console.error('Error initializing the Printify API client:', error);
+  }
 
+  try {
     const replicateApiToken = env.REPLICATE_API_TOKEN;
     if (!replicateApiToken) {
       console.error('REPLICATE_API_TOKEN environment variable is not set. The Replicate API client will not be initialized.');
@@ -49,7 +56,7 @@ export async function initializeClients(
       console.error('Replicate API client initialized successfully.');
     }
   } catch (error) {
-    console.error('Error initializing API clients:', error);
+    console.error('Error initializing the Replicate API client:', error);
   }
 
   return ctx;

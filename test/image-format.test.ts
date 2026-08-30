@@ -64,6 +64,11 @@ describe('format helpers', () => {
     expect(withExtension('cat.png', 'png')).toBe('cat.png');
     expect(withExtension('cat', 'jpeg')).toBe('cat.jpg');
     expect(withExtension('cat.jpg', 'jpeg')).toBe('cat.jpg');
+    // jpeg and jpg name the same extension, and case must not matter, so
+    // neither turns into cat.jpeg.jpg.
+    expect(withExtension('cat.jpeg', 'jpeg')).toBe('cat.jpeg');
+    expect(withExtension('cat.JPEG', 'jpeg')).toBe('cat.JPEG');
+    expect(withExtension('cat.PNG', 'png')).toBe('cat.PNG');
   });
 
   it('re-encodes at full quality for the requested format', () => {

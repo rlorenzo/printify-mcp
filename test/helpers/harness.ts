@@ -44,6 +44,12 @@ export function fakePrintify(overrides: Record<string, any> = {}) {
     uploadImage: async (fileName: string) => ({
       id: 'img_1', file_name: fileName, width: 1024, height: 1024, preview_url: 'https://example.test/p.png'
     }),
+    deleteProduct: async () => ({ success: true }),
+    publishProduct: async (id: string) => ({ id, published: true }),
+    getBlueprints: async () => ({ data: [{ id: 1, title: 'Tee' }] }),
+    getBlueprint: async (id: number) => ({ id, title: 'Tee' }),
+    getPrintProviders: async () => ([{ id: 2, title: 'Provider' }]),
+    getVariants: async () => ({ id: 2, variants: [{ id: 3, title: 'M' }] }),
     ...overrides
   } as any;
 }

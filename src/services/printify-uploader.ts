@@ -27,6 +27,69 @@ function normalizeFilePath(filePath: string): string {
 }
 
 /**
+ * Attach file diagnostics for a failed file upload.
+ *
+ * Only a path that passes read validation is inspected. Statting or reading a
+ * rejected path would let a caller-supplied source such as `/etc/passwd`
+ * disclose file metadata and leading bytes through the error report, so a
+ * refusal is recorded and nothing is touched on disk.
+ */
+async function addFileDiagnostics(diagnosticInfo: any, source: string): Promise<void> {
+  let filePath: string;
+  try {
+    filePath = validateFilePath(normalizeFilePath(source), 'read');
+  } catch {
+    diagnosticInfo.PathRejected = 'Path failed validation; file diagnostics were skipped';
+    return;
+  }
+
+  const fileInfo = getFileInfo(filePath);
+  diagnosticInfo.FileExists = fileInfo.exists;
+  diagnosticInfo.FileSize = fileInfo.exists ? fileInfo.size + ' bytes' : 'N/A';
+  if (!fileInfo.exists) return;
+
+  try {
+    const [fsModule, pathModule] = await Promise.all([import('fs'), import('path')]);
+    const fs = fsModule.default || fsModule;
+    const path = pathModule.default || pathModule;
+
+    const stats = fs.statSync(filePath);
+    diagnosticInfo.FileCreated = stats.birthtime;
+    diagnosticInfo.FileModified = stats.mtime;
+    diagnosticInfo.FilePermissions = stats.mode.toString(8);
+    diagnosticInfo.AbsolutePath = path.resolve(filePath);
+
+    try {
+      const buffer = Buffer.alloc(10);
+      const fd = fs.openSync(filePath, 'r');
+      const bytesRead = fs.readSync(fd, buffer, 0, 10, 0);
+      fs.closeSync(fd);
+      diagnosticInfo.FileReadable = true;
+      diagnosticInfo.BytesRead = bytesRead;
+      diagnosticInfo.FileFirstBytes = buffer.toString('hex').substring(0, 20);
+
+      const hexSignature = buffer.toString('hex').substring(0, 8).toLowerCase();
+      diagnosticInfo.DetectedFileType = detectImageType(hexSignature);
+      diagnosticInfo.FileSignature = hexSignature;
+    } catch (readError: any) {
+      diagnosticInfo.FileReadable = false;
+      diagnosticInfo.FileReadError = readError.message || String(readError);
+    }
+  } catch (statError: any) {
+    diagnosticInfo.FileStatError = statError.message || String(statError);
+  }
+}
+
+/** Name the image format behind a file's leading magic bytes. */
+function detectImageType(hexSignature: string): string {
+  if (hexSignature.startsWith('89504e47')) return 'PNG';
+  if (hexSignature.startsWith('ffd8ffe')) return 'JPEG';
+  if (hexSignature.startsWith('52494646')) return 'WEBP';
+  if (hexSignature.startsWith('3c737667')) return 'SVG';
+  return 'unknown';
+}
+
+/**
  * Determine the source type of an image input
  */
 export function determineImageSourceType(source: string): 'url' | 'file' | 'base64' {
@@ -237,72 +300,7 @@ export async function uploadImageToPrintify(
 
     // Add file-specific diagnostics if it's a file
     if (sourceType === 'file') {
-      let filePath: string;
-      try {
-        filePath = validateFilePath(normalizeFilePath(source), 'read');
-      } catch {
-        // The path was refused; that is already the reported error. Diagnostics
-        // must not throw a second time and escape this handler.
-        filePath = normalizeFilePath(source);
-      }
-      const fileInfo = getFileInfo(filePath);
-      diagnosticInfo.FileExists = fileInfo.exists;
-      diagnosticInfo.FileSize = fileInfo.exists ? fileInfo.size + ' bytes' : 'N/A';
-
-      // Try to get more file details if it exists
-      if (fileInfo.exists) {
-        try {
-          // Use dynamic imports for fs
-          const fsPromise = import('fs');
-          const pathPromise = import('path');
-
-          // Wait for imports to complete
-          const [fsModule, pathModule] = await Promise.all([fsPromise, pathPromise]);
-          const fs = fsModule.default || fsModule;
-          const path = pathModule.default || pathModule;
-
-          const stats = fs.statSync(filePath);
-          diagnosticInfo.FileCreated = stats.birthtime;
-          diagnosticInfo.FileModified = stats.mtime;
-          diagnosticInfo.FilePermissions = stats.mode.toString(8);
-          diagnosticInfo.AbsolutePath = path.resolve(filePath);
-
-          // Try to read the first few bytes to verify content
-          try {
-            const buffer = Buffer.alloc(10);
-            const fd = fs.openSync(filePath, 'r');
-            // Read the first 10 bytes
-            const bytesRead = fs.readSync(fd, buffer, 0, 10, 0);
-            fs.closeSync(fd);
-            diagnosticInfo.FileReadable = true;
-            diagnosticInfo.BytesRead = bytesRead;
-            diagnosticInfo.FileFirstBytes = buffer.toString('hex').substring(0, 20);
-
-            // Check file signature to determine if it's a valid image
-            const hexSignature = buffer.toString('hex').substring(0, 8).toLowerCase();
-            let fileType = 'unknown';
-
-            // Check common image signatures
-            if (hexSignature.startsWith('89504e47')) {
-              fileType = 'PNG';
-            } else if (hexSignature.startsWith('ffd8ffe')) {
-              fileType = 'JPEG';
-            } else if (hexSignature.startsWith('52494646')) {
-              fileType = 'WEBP';
-            } else if (hexSignature.startsWith('3c737667')) {
-              fileType = 'SVG';
-            }
-
-            diagnosticInfo.DetectedFileType = fileType;
-            diagnosticInfo.FileSignature = hexSignature;
-          } catch (readError: any) {
-            diagnosticInfo.FileReadable = false;
-            diagnosticInfo.FileReadError = readError.message || String(readError);
-          }
-        } catch (statError: any) {
-          diagnosticInfo.FileStatError = statError.message || String(statError);
-        }
-      }
+      await addFileDiagnostics(diagnosticInfo, source);
     }
 
     // Add error details if available

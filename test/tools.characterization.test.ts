@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { z } from 'zod';
 import { harness, fakePrintify } from './helpers/harness.js';
 
 /**
@@ -38,6 +39,9 @@ describe('service result unwrapping (duplicated if/else)', () => {
   it.each(UNWRAPPING_TOOLS)('%s returns the service response on success', async (name) => {
     const h = harness({ printifyClient: fakePrintify() });
     const res = await h.call(name, { productId: 'p1', blueprintId: 1, printProviderId: 2 });
+    // An MCP error response also carries text content, so the success shape is
+    // only meaningful alongside isError being falsy.
+    expect(res.isError, `${name} returned an error: ${res.content?.[0]?.text}`).toBeFalsy();
     expect(res).toHaveProperty('content');
     expect(Array.isArray(res.content)).toBe(true);
     expect(res.content[0]).toHaveProperty('type', 'text');
@@ -69,6 +73,20 @@ describe('image tool schemas (31-line duplicated schema)', () => {
       for (const key of SHARED) {
         expect(Object.keys(shape), `${tool} missing ${key}`).toContain(key);
       }
+    }
+  });
+
+  // Regression: width/height carried a zod .default(1024), so the MCP runtime
+  // injected dimensions the caller never asked for and mergeGenerationOptions
+  // then discarded any configured aspectRatio. The harness calls the raw
+  // handler, so only parsing through the schema catches this.
+  it('leaves width and height absent when the caller omits them', () => {
+    const h = harness();
+    for (const tool of ['generate_and_upload_image', 'generate_image']) {
+      const parsed = z.object(h.schema(tool))
+        .parse({ prompt: 'a cat', fileName: 'c', outputPath: '/tmp/c.png' });
+      expect(parsed.width, `${tool} injected a width`).toBeUndefined();
+      expect(parsed.height, `${tool} injected a height`).toBeUndefined();
     }
   });
 

@@ -76,8 +76,8 @@ const imageGenerationOptions = {
     .describe("Optional: Override the default model. Use get_defaults to see available models"),
 
   // Common parameters for both models
-  width: z.number().optional().default(1024).describe("Image width in pixels"),
-  height: z.number().optional().default(1024).describe("Image height in pixels"),
+  width: z.number().optional().describe("Image width in pixels (default 1024 unless an aspect ratio is set)"),
+  height: z.number().optional().describe("Image height in pixels (default 1024 unless an aspect ratio is set)"),
   aspectRatio: z.string().optional().describe("Aspect ratio (e.g., '16:9', '4:3', '1:1'). If provided, overrides width and height"),
   outputFormat: z.enum(["jpeg", "png", "webp"]).optional().default("png").describe("Output format"),
   safetyTolerance: z.number().optional().default(2).describe("Safety tolerance (0-6)"),

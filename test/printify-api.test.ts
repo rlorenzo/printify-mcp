@@ -197,7 +197,11 @@ describe('updateProduct', () => {
 });
 
 describe('uploadImage remaining branches', () => {
-  it('treats a bare base64 string as image contents', async () => {
+  // uploadImage classifies anything that is not an http(s) URL and not a
+  // `data:` URL as a file path, by design: raw base64 is never accepted as
+  // contents. The generation tools therefore wrap their bytes in a data URL,
+  // which is what this covers, using real PNG bytes so sharp validation runs.
+  it('takes contents from a data URL carrying real image bytes', async () => {
     const { instance, uploadImage } = api();
     const b64 = (await sharp({ create: { width: 4, height: 4, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 1 } } })
       .png().toBuffer()).toString('base64');

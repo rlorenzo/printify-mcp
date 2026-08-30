@@ -50,8 +50,9 @@ describe('initializeClients', () => {
     vi.spyOn(PrintifyAPI.prototype, 'initialize').mockRejectedValue(new Error('network down'));
     const c = await initializeClients(ctx(), { PRINTIFY_API_KEY: 'k', REPLICATE_API_TOKEN: 't' });
     expect(c.printifyClient).toBeInstanceOf(PrintifyAPI);
-    // The failure aborted the rest of setup, so Replicate stays unset.
-    expect(c.replicateClient).toBeNull();
+    // The two clients initialize independently, so a Printify outage must not
+    // take the Replicate-backed image tools down with it.
+    expect(c.replicateClient).toBeInstanceOf(ReplicateClient);
   });
 
   it('passes a configured shop id through', async () => {

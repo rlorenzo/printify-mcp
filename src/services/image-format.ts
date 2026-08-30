@@ -50,10 +50,17 @@ export function extensionFor(outputFormat: string): string {
   return outputFormat === 'jpeg' ? 'jpg' : outputFormat;
 }
 
-/** Append the format's extension unless the name already carries it. */
+/**
+ * Append the format's extension unless the name already carries it.
+ *
+ * Matching is case-insensitive and treats .jpg and .jpeg as the same extension,
+ * so a caller's `photo.JPEG` is left alone rather than becoming `photo.JPEG.jpg`.
+ */
 export function withExtension(fileName: string, outputFormat: string): string {
   const ext = extensionFor(outputFormat);
-  return fileName.endsWith(`.${ext}`) ? fileName : `${fileName}.${ext}`;
+  const equivalents = ext === 'jpg' ? ['jpg', 'jpeg'] : [ext];
+  const current = fileName.toLowerCase();
+  return equivalents.some((e) => current.endsWith(`.${e}`)) ? fileName : `${fileName}.${ext}`;
 }
 
 /** Re-encode at full quality in the requested format, leaving others untouched. */
@@ -84,7 +91,10 @@ export async function saveDebugCopy(buffer: Buffer | undefined, fileName: string
       console.error('No image data to save for debugging');
       return;
     }
-    const debugFilePath = path.join(debugDir, `debug_${Date.now()}_${fileName ?? 'image'}`);
+    // basename only: fileName reaches here from tool arguments, and `../`
+    // segments would otherwise let a caller write outside debugDir.
+    const safeName = path.basename(fileName ?? 'image') || 'image';
+    const debugFilePath = path.join(debugDir, `debug_${Date.now()}_${safeName}`);
     fs.writeFileSync(debugFilePath, buffer);
     console.error(`Saved image data to debug file: ${debugFilePath} (${buffer.length} bytes)`);
   } catch (debugError) {

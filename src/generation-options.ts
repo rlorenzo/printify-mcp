@@ -25,7 +25,8 @@ export function mergeGenerationOptions(
     negativePrompt: defaults.negativePrompt,
     raw: defaults.raw,
     promptUpsampling: defaults.promptUpsampling,
-    outputQuality: defaults.outputQuality
+    outputQuality: defaults.outputQuality,
+    imagePromptStrength: defaults.imagePromptStrength
   };
 
   for (const [key, value] of Object.entries(args)) {

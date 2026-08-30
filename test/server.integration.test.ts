@@ -16,23 +16,47 @@ function rpc(requests: object[], timeoutMs = 6000): Promise<{ stdout: string; fr
       stdio: ['pipe', 'pipe', 'pipe']
     });
     let stdout = '';
-    child.stdout.on('data', (d) => { stdout += d; });
+    let handshakeDone = false;
+
+    // The protocol requires the initialize response before anything else is
+    // sent, so drive the rest of the session off that frame rather than a fixed
+    // delay that a slow machine can outrun.
+    child.stdout.on('data', (d) => {
+      stdout += d;
+      if (handshakeDone || !stdout.split('\n').some(isInitializeResponse)) return;
+      handshakeDone = true;
+      child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
+      for (const r of requests.slice(1)) child.stdin.write(JSON.stringify(r) + '\n');
+    });
     child.stderr.on('data', () => { /* logs belong here; ignored */ });
 
     child.stdin.write(JSON.stringify(requests[0]) + '\n');
-    setTimeout(() => {
-      child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
-      for (const r of requests.slice(1)) child.stdin.write(JSON.stringify(r) + '\n');
-    }, 1200);
 
     setTimeout(() => {
       child.kill();
-      const frames = stdout.split('\n').filter(Boolean)
-        .map((l) => { try { return JSON.parse(l); } catch { return null; } })
-        .filter(Boolean);
-      resolve({ stdout, frames });
+      resolve({ stdout, frames: parseFrames(stdout) });
     }, timeoutMs - 500);
   });
+}
+
+/** Every line of stdout, minus only the trailing newline of the last frame. */
+function stdoutLines(stdout: string): string[] {
+  return stdout.replace(/\n$/, '').split('\n');
+}
+
+function parseFrames(stdout: string): any[] {
+  return stdoutLines(stdout)
+    .map((l) => { try { return JSON.parse(l); } catch { return null; } })
+    .filter(Boolean);
+}
+
+function isInitializeResponse(line: string): boolean {
+  try {
+    const frame = JSON.parse(line);
+    return frame?.id === 1 && frame?.result !== undefined;
+  } catch {
+    return false;
+  }
 }
 
 const init = {
@@ -53,7 +77,9 @@ describe('stdio server', () => {
       { jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'how_to_use', arguments: { topic: 'product_creation' } } }
     ]);
 
-    const nonJson = stdout.split('\n').filter(Boolean).filter((l) => {
+    // Blank lines count: anything on stdout that is not a JSON-RPC frame
+    // corrupts the stream, so only the final framing newline is stripped.
+    const nonJson = stdoutLines(stdout).filter((l) => {
       try { JSON.parse(l); return false; } catch { return true; }
     });
     expect(nonJson).toEqual([]);
