@@ -10,11 +10,13 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import dotenv from "dotenv";
 import { PrintifyAPI } from "./printify-api.js";
 import { ReplicateClient } from "./replicate-client.js";
+import { DefaultsManager } from "./model-manager.js";
 import { registerTools, type PrintifyContext } from "./tools.js";
 
 // Public surface
 export { PrintifyAPI, type PrintifyShop } from './printify-api.js';
 export { ReplicateClient } from './replicate-client.js';
+export { DefaultsManager } from './model-manager.js';
 export { registerTools, type PrintifyContext } from './tools.js';
 export * from './services/image-generator.js';
 export * from './services/printify-uploader.js';
@@ -51,9 +53,14 @@ export function createPrintifyMcpServer(options?: {
   const printifyShopId = options?.printifyShopId || process.env.PRINTIFY_SHOP_ID;
   const replicateApiToken = options?.replicateApiToken || process.env.REPLICATE_API_TOKEN;
 
+  // Shared with the Replicate client when there is one, so a default set
+  // through set_default reaches image generation, and survives its absence.
+  const defaultsManager = new DefaultsManager();
+
   const ctx: PrintifyContext = {
     printifyClient: printifyApiKey ? new PrintifyAPI(printifyApiKey, printifyShopId) : null,
-    replicateClient: replicateApiToken ? new ReplicateClient(replicateApiToken) : null
+    replicateClient: replicateApiToken ? new ReplicateClient(replicateApiToken, defaultsManager) : null,
+    defaultsManager
   };
 
   registerTools(server, ctx);

@@ -8,14 +8,20 @@ export class ReplicateClient {
   private client: Replicate;
   private defaultsManager: DefaultsManager;
 
-  constructor(apiToken: string) {
+  /**
+   * @param apiToken Replicate API token.
+   * @param defaultsManager The generation defaults to read and write. Injected
+   *   so the caller can own it: `get_defaults`/`set_default` must keep working
+   *   when no token is configured and this client is therefore never built, and
+   *   any default set while it was absent has to reach the client once it is.
+   */
+  constructor(apiToken: string, defaultsManager: DefaultsManager = new DefaultsManager()) {
     // Initialize the Replicate client with the API token
     this.client = new Replicate({
       auth: apiToken,
     });
 
-    // Initialize the defaults manager
-    this.defaultsManager = new DefaultsManager();
+    this.defaultsManager = defaultsManager;
   }
 
   // No need for getTempDir method anymore

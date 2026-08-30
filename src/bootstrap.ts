@@ -6,6 +6,7 @@
  */
 import { PrintifyAPI } from './printify-api.js';
 import { ReplicateClient } from './replicate-client.js';
+import { DefaultsManager } from './model-manager.js';
 import type { PrintifyContext } from './tools.js';
 
 /**
@@ -48,11 +49,15 @@ export async function initializeClients(
   }
 
   try {
+    // The defaults outlive the client: they are readable and settable with no
+    // token, so hand the same manager to the client when there is one.
+    ctx.defaultsManager ??= new DefaultsManager();
+
     const replicateApiToken = env.REPLICATE_API_TOKEN;
     if (!replicateApiToken) {
-      console.error('REPLICATE_API_TOKEN environment variable is not set. The Replicate API client will not be initialized.');
+      console.error('REPLICATE_API_TOKEN environment variable is not set. The Replicate API client will not be initialized, so image generation is unavailable. get_defaults and set_default still work.');
     } else {
-      ctx.replicateClient = new ReplicateClient(replicateApiToken);
+      ctx.replicateClient = new ReplicateClient(replicateApiToken, ctx.defaultsManager);
       console.error('Replicate API client initialized successfully.');
     }
   } catch (error) {

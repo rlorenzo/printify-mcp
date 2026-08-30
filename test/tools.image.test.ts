@@ -11,14 +11,32 @@ async function png() {
   return await sharp({ create: { width: 8, height: 8, channels: 4, background: { r: 2, g: 2, b: 2, alpha: 1 } } }).png().toBuffer();
 }
 
-function fakeReplicate(overrides: Record<string, any> = {}) {
+const PRO_DEFAULTS = {
+  model: PRO, width: 1024, height: 1024, aspectRatio: '1:1', outputFormat: 'png',
+  safetyTolerance: 2, numInferenceSteps: 25, guidanceScale: 7.5,
+  negativePrompt: 'low quality', raw: false, promptUpsampling: true, outputQuality: 90
+};
+
+/**
+ * Stands in for the defaults the context owns. The real client exposes the same
+ * manager through getDefaultsManager(), which is where the tools read from.
+ */
+function fakeDefaults(values: Record<string, any> = PRO_DEFAULTS) {
+  const defaults = { ...values };
   return {
-    getDefaultModel: () => PRO,
-    getAllDefaults: () => ({
-      model: PRO, width: 1024, height: 1024, aspectRatio: '1:1', outputFormat: 'png',
-      safetyTolerance: 2, numInferenceSteps: 25, guidanceScale: 7.5,
-      negativePrompt: 'low quality', raw: false, promptUpsampling: true, outputQuality: 90
-    }),
+    getDefault: (k: string) => defaults[k],
+    getAllDefaults: () => ({ ...defaults }),
+    setDefault: (k: string, v: any) => { defaults[k] = v; },
+    getAvailableModels: () => []
+  } as any;
+}
+
+function fakeReplicate(overrides: Record<string, any> = {}) {
+  const defaults = fakeDefaults();
+  return {
+    getDefaultsManager: () => defaults,
+    getDefaultModel: () => defaults.getDefault('model'),
+    getAllDefaults: () => defaults.getAllDefaults(),
     generateImage: vi.fn(async () => await png()),
     ...overrides
   } as any;
