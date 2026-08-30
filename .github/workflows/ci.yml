@@ -40,21 +40,6 @@ jobs:
       - name: Lint (markdown)
         run: npm run lint:md
 
-      # TEMPORARY: confirms that mkdir under /proc is what stalled the suite.
-      - name: Probe /proc mkdir
-        timeout-minutes: 2
-        run: |
-          node -e "
-            const fs = require('fs');
-            console.log('probing mkdirSync(/proc/nope, {recursive:true})');
-            const t = Date.now();
-            try { fs.mkdirSync('/proc/nope', { recursive: true }); console.log('unexpectedly succeeded'); }
-            catch (e) { console.log('threw', e.code, 'after', Date.now() - t, 'ms'); }
-          " &
-          probe=$!
-          sleep 20
-          if kill -0 $probe 2>/dev/null; then echo "PROBE HUNG"; kill -9 $probe; else echo "probe returned"; fi
-
       # Integration tests spawn the built server, so this must follow the build.
       - name: Test
         timeout-minutes: 6
@@ -103,6 +88,9 @@ jobs:
             --dupes-baseline .fallow/dupes.baseline.json \
             --dead-code-baseline .fallow/dead-code.baseline.json
 
+      # Reporting only; "Audit changed files" above is what gates the PR. Without
+      # --gate new-only this exits non-zero on the pre-existing findings the
+      # baselines freeze, which must not fail the job.
       - name: Job summary
         if: always()
-        run: npx fallow audit --format github-summary --coverage coverage/coverage-final.json >> "$GITHUB_STEP_SUMMARY"
+        run: npx fallow audit --format github-summary --coverage coverage/coverage-final.json >> "$GITHUB_STEP_SUMMARY" || true
