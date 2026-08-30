@@ -15,7 +15,9 @@ let debugDir: string;
 
 beforeAll(() => {
   originalCwd = process.cwd();
-  sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'printify-debug-'));
+  // realpath: on macOS os.tmpdir() is a symlink, so the sandbox path must
+  // match what process.cwd() reports after the chdir below.
+  sandbox = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'printify-debug-')));
   process.chdir(sandbox);
   debugDir = path.join(sandbox, 'debug');
 });

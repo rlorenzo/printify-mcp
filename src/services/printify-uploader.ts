@@ -61,9 +61,16 @@ async function addFileDiagnostics(diagnosticInfo: any, source: string): Promise<
 
     try {
       const buffer = Buffer.alloc(10);
+      // The descriptor is closed in `finally`: readSync throws EISDIR on a
+      // directory, and leaking a descriptor on every such upload would
+      // eventually exhaust the process's limit.
       const fd = fs.openSync(filePath, 'r');
-      const bytesRead = fs.readSync(fd, buffer, 0, 10, 0);
-      fs.closeSync(fd);
+      let bytesRead: number;
+      try {
+        bytesRead = fs.readSync(fd, buffer, 0, 10, 0);
+      } finally {
+        fs.closeSync(fd);
+      }
       diagnosticInfo.FileReadable = true;
       diagnosticInfo.BytesRead = bytesRead;
       diagnosticInfo.FileFirstBytes = buffer.toString('hex').substring(0, 20);

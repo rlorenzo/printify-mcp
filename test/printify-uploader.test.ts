@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import * as os from 'node:os';
 import sharp from 'sharp';
 import { determineImageSourceType, uploadImageToPrintify } from '../src/services/printify-uploader.js';
 
@@ -122,17 +123,46 @@ describe('uploadImageToPrintify diagnostics', () => {
     expect(JSON.stringify(r.errorResponse)).toMatch(/FileExists|file path/);
   });
 
+  // saveDebugCopy writes to <cwd>/debug, so this runs from a temporary working
+  // directory rather than creating and deleting the repository's real one.
   it('writes a debug copy only when enabled', async () => {
-    const f = await pngFile('dbg.png');
+    // realpath: on macOS os.tmpdir() is a symlink, and the uploader compares
+    // the source against the resolved working directory.
+    const sandbox = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'printify-upload-')));
+    // The uploader restricts reads to the working directory, so the source
+    // image has to live inside the sandbox too.
+    const f = path.join(sandbox, 'dbg.png');
+    fs.writeFileSync(f, await sharp({ create: { width: 4, height: 4, channels: 4, background: { r: 1, g: 1, b: 1, alpha: 1 } } }).png().toBuffer());
+    const originalCwd = process.cwd();
     process.env.PRINTIFY_MCP_DEBUG = '1';
     try {
+      process.chdir(sandbox);
       const r = await uploadImageToPrintify(client(), 'dbg.png', f);
       expect(r.success).toBe(true);
-      expect(fs.existsSync(path.join(process.cwd(), 'debug'))).toBe(true);
+      expect(fs.existsSync(path.join(sandbox, 'debug'))).toBe(true);
     } finally {
       delete process.env.PRINTIFY_MCP_DEBUG;
-      fs.rmSync(path.join(process.cwd(), 'debug'), { recursive: true, force: true });
+      process.chdir(originalCwd);
+      fs.rmSync(sandbox, { recursive: true, force: true });
     }
+  });
+
+  // readSync throws EISDIR here, which previously skipped closeSync and leaked
+  // the descriptor on every such upload.
+  it('closes the descriptor when the diagnostic read fails', async () => {
+    fs.mkdirSync(scratch, { recursive: true });
+    const c = client({ uploadImage: vi.fn(async () => { throw new Error('nope'); }) });
+    const before = process.report?.getReport() as any;
+    const openBefore = before?.libuv?.filter((h: any) => h.type === 'file').length ?? 0;
+
+    for (let i = 0; i < 5; i++) await uploadImageToPrintify(c, 'dir.png', scratch);
+
+    const after = process.report?.getReport() as any;
+    const openAfter = after?.libuv?.filter((h: any) => h.type === 'file').length ?? 0;
+    expect(openAfter).toBe(openBefore);
+
+    const r = await uploadImageToPrintify(c, 'dir.png', scratch);
+    expect(JSON.stringify(r.errorResponse)).toMatch(/EISDIR|FileReadable/);
   });
 
   it('tailors tips to a base64 source', async () => {
