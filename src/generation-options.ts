@@ -32,5 +32,20 @@ export function mergeGenerationOptions(
     if (value !== undefined) merged[key] = value;
   }
 
+  // Aspect ratio and explicit dimensions are mutually exclusive, and an
+  // explicit argument must outrank a stored default. Without this, a saved
+  // default aspectRatio silently swallowed a caller's width/height, because
+  // downstream mapping prefers a ratio whenever one is present. This mirrors
+  // the exclusivity DefaultsManager.setDefault already enforces.
+  const askedForRatio = args.aspectRatio !== undefined;
+  const askedForSize = args.width !== undefined || args.height !== undefined;
+
+  if (askedForRatio && !askedForSize) {
+    delete merged.width;
+    delete merged.height;
+  } else if (askedForSize && !askedForRatio) {
+    delete merged.aspectRatio;
+  }
+
   return merged;
 }

@@ -52,3 +52,40 @@ describe('mergeGenerationOptions', () => {
     expect(defaults).toEqual(snapshot);
   });
 });
+
+describe('mergeGenerationOptions dimension exclusivity', () => {
+  const withRatio = { ...defaults, aspectRatio: '1:1' };
+
+  // The bug this guards: a stored default ratio silently discarded a width the
+  // caller explicitly asked for.
+  it('an explicit width drops the default aspectRatio', () => {
+    const out = mergeGenerationOptions(withRatio, { width: 512 });
+    expect(out.width).toBe(512);
+    expect(out).not.toHaveProperty('aspectRatio');
+  });
+
+  it('an explicit height drops the default aspectRatio', () => {
+    const out = mergeGenerationOptions(withRatio, { height: 512 });
+    expect(out).not.toHaveProperty('aspectRatio');
+  });
+
+  it('an explicit aspectRatio drops default dimensions', () => {
+    const out = mergeGenerationOptions({ ...defaults, width: 800, height: 600 }, { aspectRatio: '16:9' });
+    expect(out.aspectRatio).toBe('16:9');
+    expect(out).not.toHaveProperty('width');
+    expect(out).not.toHaveProperty('height');
+  });
+
+  // When the caller supplies both, neither is an override of the other, so the
+  // downstream mapping keeps its own documented precedence (ratio wins).
+  it('keeps both when the caller asks for both', () => {
+    const out = mergeGenerationOptions(withRatio, { aspectRatio: '4:3', width: 100 });
+    expect(out.aspectRatio).toBe('4:3');
+    expect(out.width).toBe(100);
+  });
+
+  it('leaves defaults alone when the caller asks for neither', () => {
+    const out = mergeGenerationOptions(withRatio, { seed: 1 });
+    expect(out.aspectRatio).toBe('1:1');
+  });
+});

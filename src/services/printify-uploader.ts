@@ -57,47 +57,58 @@ async function verifyFileReadable(filePath: string): Promise<void> {
     const fs = await import('fs');
     const path = await import('path');
 
-    if (!fs.existsSync(filePath)) {
-      console.error(`ERROR: File does not exist at upload time: ${filePath}`);
-      throw new Error(`File does not exist at upload time: ${filePath}`);
-    }
-
-    const stats = fs.statSync(filePath);
-    console.error(`File verification before upload:`);
-    console.error(`- Path: ${filePath}`);
-    console.error(`- Absolute path: ${path.resolve(filePath)}`);
-    console.error(`- Size: ${stats.size} bytes`);
-    console.error(`- Created: ${stats.birthtime}`);
-    console.error(`- Permissions: ${stats.mode.toString(8)}`);
-
+    // Open once and inspect through the descriptor. Checking existence,
+    // permissions and readability as separate path lookups re-resolves the name
+    // each time, so the file could be swapped between the check and the use
+    // (TOCTOU). A single open gives one handle to one inode: a missing file
+    // raises ENOENT and an unreadable one EACCES, which is the same information
+    // the separate checks produced.
+    let fd: number;
     try {
-      fs.accessSync(filePath, fs.constants.R_OK);
-      console.error(`- Readable: Yes`);
-    } catch (e: any) {
-      console.error(`- Readable: No - ${e.message || e}`);
-    }
-
-    try {
-      const fd = fs.openSync(filePath, 'r');
-      const buffer = Buffer.alloc(10);
-      const bytesRead = fs.readSync(fd, buffer, 0, 10, 0);
-      fs.closeSync(fd);
-      console.error(`- Read test: Successfully read ${bytesRead} bytes`);
-    } catch (readError: any) {
-      console.error(`- Read test failed: ${readError.message || readError}`);
-    }
-
-    // Copy of every uploaded file, written only when explicitly enabled.
-    if (process.env.PRINTIFY_MCP_DEBUG) {
-      try {
-        const debugDir = path.join(process.cwd(), 'debug');
-        if (!fs.existsSync(debugDir)) fs.mkdirSync(debugDir, { recursive: true });
-        const debugFilePath = path.join(debugDir, `upload_${Date.now()}_${path.basename(filePath)}`);
-        fs.copyFileSync(filePath, debugFilePath);
-        console.error(`- Debug copy: ${debugFilePath}`);
-      } catch (copyError: any) {
-        console.error(`- Debug copy failed: ${copyError.message || copyError}`);
+      fd = fs.openSync(filePath, 'r');
+    } catch (openError: any) {
+      if (openError?.code === 'ENOENT') {
+        console.error(`ERROR: File does not exist at upload time: ${filePath}`);
+        throw new Error(`File does not exist at upload time: ${filePath}`, { cause: openError });
       }
+      console.error(`ERROR: File is not readable at upload time: ${filePath}`);
+      throw new Error(`File is not readable at upload time: ${filePath}`, { cause: openError });
+    }
+
+    try {
+      const stats = fs.fstatSync(fd);
+      console.error(`File verification before upload:`);
+      console.error(`- Path: ${filePath}`);
+      console.error(`- Absolute path: ${path.resolve(filePath)}`);
+      console.error(`- Size: ${stats.size} bytes`);
+      console.error(`- Created: ${stats.birthtime}`);
+      console.error(`- Permissions: ${stats.mode.toString(8)}`);
+
+      try {
+        const buffer = Buffer.alloc(10);
+        const bytesRead = fs.readSync(fd, buffer, 0, 10, 0);
+        console.error(`- Readable: Yes`);
+        console.error(`- Read test: Successfully read ${bytesRead} bytes`);
+      } catch (readError: any) {
+        console.error(`- Read test failed: ${readError.message || readError}`);
+      }
+
+      // Copy of every uploaded file, written only when explicitly enabled.
+      if (process.env.PRINTIFY_MCP_DEBUG) {
+        try {
+          const debugDir = path.join(process.cwd(), 'debug');
+          // recursive:true is idempotent, so no existence check is needed.
+          fs.mkdirSync(debugDir, { recursive: true });
+          const debugFilePath = path.join(debugDir, `upload_${Date.now()}_${path.basename(filePath)}`);
+          // Written from the open descriptor rather than re-opening by name.
+          fs.writeFileSync(debugFilePath, fs.readFileSync(fd));
+          console.error(`- Debug copy: ${debugFilePath}`);
+        } catch (copyError: any) {
+          console.error(`- Debug copy failed: ${copyError.message || copyError}`);
+        }
+      }
+    } finally {
+      fs.closeSync(fd);
     }
   } catch (verifyError: any) {
     console.error('Error verifying file before upload:', verifyError);

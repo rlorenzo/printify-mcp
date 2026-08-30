@@ -47,17 +47,22 @@ describe('generate_and_upload_image', () => {
     expect(sent).toMatchObject({ seed: 3, outputFormat: 'webp' });
   });
 
-  // Documents current precedence rather than endorsing it: the stored default
-  // aspectRatio outranks an explicitly requested width, so the width is
-  // dropped. Arguably wrong -- an explicit argument should beat a default --
-  // but changing it is a behaviour change, not a complexity fix.
-  it('lets a default aspectRatio suppress an explicit width', async () => {
+  // An explicit dimension must outrank a stored default aspectRatio; the
+  // default previously swallowed it, so the caller's width was silently lost.
+  it('lets an explicit width override the default aspectRatio', async () => {
     const replicate = fakeReplicate();
     const h = harness({ printifyClient: fakePrintify(), replicateClient: replicate });
-    await h.call('generate_and_upload_image', { prompt: 'x', fileName: 'f', width: 512 });
+    await h.call('generate_and_upload_image', { prompt: 'x', fileName: 'f', width: 512, height: 512 });
     const sent = replicate.generateImage.mock.calls[0][1];
-    expect(sent.aspectRatio).toBe('1:1');
-    expect(sent).not.toHaveProperty('width');
+    expect(sent.width).toBe(512);
+    expect(sent).not.toHaveProperty('aspectRatio');
+  });
+
+  it('still uses the default aspectRatio when no size is requested', async () => {
+    const replicate = fakeReplicate();
+    const h = harness({ printifyClient: fakePrintify(), replicateClient: replicate });
+    await h.call('generate_and_upload_image', { prompt: 'x', fileName: 'f' });
+    expect(replicate.generateImage.mock.calls[0][1].aspectRatio).toBe('1:1');
   });
 
   // Failing before generation avoids paying for an image that cannot be staged.
