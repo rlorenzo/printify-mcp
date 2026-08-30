@@ -40,11 +40,25 @@ jobs:
       - name: Lint (markdown)
         run: npm run lint:md
 
+      # TEMPORARY: confirms that mkdir under /proc is what stalled the suite.
+      - name: Probe /proc mkdir
+        timeout-minutes: 2
+        run: |
+          node -e "
+            const fs = require('fs');
+            console.log('probing mkdirSync(/proc/nope, {recursive:true})');
+            const t = Date.now();
+            try { fs.mkdirSync('/proc/nope', { recursive: true }); console.log('unexpectedly succeeded'); }
+            catch (e) { console.log('threw', e.code, 'after', Date.now() - t, 'ms'); }
+          " &
+          probe=$!
+          sleep 20
+          if kill -0 $probe 2>/dev/null; then echo "PROBE HUNG"; kill -9 $probe; else echo "probe returned"; fi
+
       # Integration tests spawn the built server, so this must follow the build.
-      # TEMPORARY: hanging-process reports the handles keeping vitest alive.
       - name: Test
         timeout-minutes: 6
-        run: npx vitest run --coverage --reporter=default --reporter=hanging-process
+        run: npm run test:coverage
 
       - name: Upload coverage
         if: always()

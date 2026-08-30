@@ -145,9 +145,15 @@ describe('generate_image', () => {
     expect(res.isError).toBe(true);
   });
 
+  // The parent of the output path is a regular file, so creating the directory
+  // fails with ENOTDIR. Using a real file rather than a special path such as
+  // /proc keeps the case identical on macOS and Linux.
   it('reports an unwritable output path', async () => {
+    fs.mkdirSync(scratch, { recursive: true });
+    const blocker = path.join(scratch, 'not-a-dir');
+    fs.writeFileSync(blocker, 'x');
     const h = harness({ replicateClient: fakeReplicate() });
-    const res = await h.call('generate_image', { prompt: 'x', outputPath: '/proc/nope/x.png' });
+    const res = await h.call('generate_image', { prompt: 'x', outputPath: path.join(blocker, 'x.png') });
     expect(res.isError).toBe(true);
   });
 });
