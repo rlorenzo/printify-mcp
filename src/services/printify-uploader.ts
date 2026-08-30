@@ -12,9 +12,10 @@ import { getFileInfo, validateFilePath } from '../utils/file-utils.js';
 function normalizeFilePath(filePath: string): string {
   let normalizedPath = filePath;
 
-  // Handle file:/// URLs
-  if (normalizedPath.startsWith('file:///')) {
-    normalizedPath = normalizedPath.replace('file:///', '');
+  // Handle file:// URLs. Strip only the scheme: file:///Users/x is the
+  // absolute path /Users/x, so the third slash must survive.
+  if (normalizedPath.startsWith('file://')) {
+    normalizedPath = normalizedPath.slice('file://'.length);
   }
 
   // Handle leading slash on Windows
@@ -23,6 +24,76 @@ function normalizeFilePath(filePath: string): string {
   }
 
   return normalizedPath;
+}
+
+/**
+ * Attach file diagnostics for a failed file upload.
+ *
+ * Only a path that passes read validation is inspected. Statting or reading a
+ * rejected path would let a caller-supplied source such as `/etc/passwd`
+ * disclose file metadata and leading bytes through the error report, so a
+ * refusal is recorded and nothing is touched on disk.
+ */
+async function addFileDiagnostics(diagnosticInfo: any, source: string): Promise<void> {
+  let filePath: string;
+  try {
+    filePath = validateFilePath(normalizeFilePath(source), 'read');
+  } catch {
+    diagnosticInfo.PathRejected = 'Path failed validation; file diagnostics were skipped';
+    return;
+  }
+
+  const fileInfo = getFileInfo(filePath);
+  diagnosticInfo.FileExists = fileInfo.exists;
+  diagnosticInfo.FileSize = fileInfo.exists ? fileInfo.size + ' bytes' : 'N/A';
+  if (!fileInfo.exists) return;
+
+  try {
+    const [fsModule, pathModule] = await Promise.all([import('fs'), import('path')]);
+    const fs = fsModule.default || fsModule;
+    const path = pathModule.default || pathModule;
+
+    const stats = fs.statSync(filePath);
+    diagnosticInfo.FileCreated = stats.birthtime;
+    diagnosticInfo.FileModified = stats.mtime;
+    diagnosticInfo.FilePermissions = stats.mode.toString(8);
+    diagnosticInfo.AbsolutePath = path.resolve(filePath);
+
+    try {
+      const buffer = Buffer.alloc(10);
+      // The descriptor is closed in `finally`: readSync throws EISDIR on a
+      // directory, and leaking a descriptor on every such upload would
+      // eventually exhaust the process's limit.
+      const fd = fs.openSync(filePath, 'r');
+      let bytesRead: number;
+      try {
+        bytesRead = fs.readSync(fd, buffer, 0, 10, 0);
+      } finally {
+        fs.closeSync(fd);
+      }
+      diagnosticInfo.FileReadable = true;
+      diagnosticInfo.BytesRead = bytesRead;
+      diagnosticInfo.FileFirstBytes = buffer.toString('hex').substring(0, 20);
+
+      const hexSignature = buffer.toString('hex').substring(0, 8).toLowerCase();
+      diagnosticInfo.DetectedFileType = detectImageType(hexSignature);
+      diagnosticInfo.FileSignature = hexSignature;
+    } catch (readError: any) {
+      diagnosticInfo.FileReadable = false;
+      diagnosticInfo.FileReadError = readError.message || String(readError);
+    }
+  } catch (statError: any) {
+    diagnosticInfo.FileStatError = statError.message || String(statError);
+  }
+}
+
+/** Name the image format behind a file's leading magic bytes. */
+function detectImageType(hexSignature: string): string {
+  if (hexSignature.startsWith('89504e47')) return 'PNG';
+  if (hexSignature.startsWith('ffd8ffe')) return 'JPEG';
+  if (hexSignature.startsWith('52494646')) return 'WEBP';
+  if (hexSignature.startsWith('3c737667')) return 'SVG';
+  return 'unknown';
 }
 
 /**
@@ -41,6 +112,78 @@ export function determineImageSourceType(source: string): 'url' | 'file' | 'base
 
   // Otherwise assume it's base64
   return 'base64';
+}
+
+/**
+ * Confirm a file is present and readable before handing it to the SDK, logging
+ * what was observed.
+ *
+ * Diagnostics only, plus the one throw that matters: an upload of a file that
+ * vanished between validation and use fails here with a clear message rather
+ * than inside the SDK.
+ */
+async function verifyFileReadable(filePath: string): Promise<void> {
+  try {
+    const fs = await import('fs');
+    const path = await import('path');
+
+    // Open once and inspect through the descriptor. Checking existence,
+    // permissions and readability as separate path lookups re-resolves the name
+    // each time, so the file could be swapped between the check and the use
+    // (TOCTOU). A single open gives one handle to one inode: a missing file
+    // raises ENOENT and an unreadable one EACCES, which is the same information
+    // the separate checks produced.
+    let fd: number;
+    try {
+      fd = fs.openSync(filePath, 'r');
+    } catch (openError: any) {
+      if (openError?.code === 'ENOENT') {
+        console.error(`ERROR: File does not exist at upload time: ${filePath}`);
+        throw new Error(`File does not exist at upload time: ${filePath}`, { cause: openError });
+      }
+      console.error(`ERROR: File is not readable at upload time: ${filePath}`);
+      throw new Error(`File is not readable at upload time: ${filePath}`, { cause: openError });
+    }
+
+    try {
+      const stats = fs.fstatSync(fd);
+      console.error(`File verification before upload:`);
+      console.error(`- Path: ${filePath}`);
+      console.error(`- Absolute path: ${path.resolve(filePath)}`);
+      console.error(`- Size: ${stats.size} bytes`);
+      console.error(`- Created: ${stats.birthtime}`);
+      console.error(`- Permissions: ${stats.mode.toString(8)}`);
+
+      try {
+        const buffer = Buffer.alloc(10);
+        const bytesRead = fs.readSync(fd, buffer, 0, 10, 0);
+        console.error(`- Readable: Yes`);
+        console.error(`- Read test: Successfully read ${bytesRead} bytes`);
+      } catch (readError: any) {
+        console.error(`- Read test failed: ${readError.message || readError}`);
+      }
+
+      // Copy of every uploaded file, written only when explicitly enabled.
+      if (process.env.PRINTIFY_MCP_DEBUG) {
+        try {
+          const debugDir = path.join(process.cwd(), 'debug');
+          // recursive:true is idempotent, so no existence check is needed.
+          fs.mkdirSync(debugDir, { recursive: true });
+          const debugFilePath = path.join(debugDir, `upload_${Date.now()}_${path.basename(filePath)}`);
+          // Written from the open descriptor rather than re-opening by name.
+          fs.writeFileSync(debugFilePath, fs.readFileSync(fd));
+          console.error(`- Debug copy: ${debugFilePath}`);
+        } catch (copyError: any) {
+          console.error(`- Debug copy failed: ${copyError.message || copyError}`);
+        }
+      }
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch (verifyError: any) {
+    console.error('Error verifying file before upload:', verifyError);
+    throw new Error(`Failed to verify file before upload: ${verifyError.message || verifyError}`, { cause: verifyError });
+  }
 }
 
 /**
@@ -82,60 +225,7 @@ export async function uploadImageToPrintify(
         throw new Error(`File is too large (${Math.round(fileInfo.size / (1024 * 1024))}MB). Maximum size is 20MB.`);
       }
 
-      // Verify the file exists and is readable before uploading
-      try {
-        // Use dynamic imports for fs and path
-        const fs = await import('fs');
-        const path = await import('path');
-
-        if (fs.existsSync(filePath)) {
-          const stats = fs.statSync(filePath);
-          console.error(`File verification before upload:`);
-          console.error(`- Path: ${filePath}`);
-          console.error(`- Absolute path: ${path.resolve(filePath)}`);
-          console.error(`- Size: ${stats.size} bytes`);
-          console.error(`- Created: ${stats.birthtime}`);
-          console.error(`- Permissions: ${stats.mode.toString(8)}`);
-
-          try {
-            fs.accessSync(filePath, fs.constants.R_OK);
-            console.error(`- Readable: Yes`);
-          } catch (e: any) {
-            console.error(`- Readable: No - ${e.message || e}`);
-          }
-
-          // Try to read the first few bytes to verify the file is readable
-          try {
-            const fd = fs.openSync(filePath, 'r');
-            const buffer = Buffer.alloc(10);
-            const bytesRead = fs.readSync(fd, buffer, 0, 10, 0);
-            fs.closeSync(fd);
-            console.error(`- Read test: Successfully read ${bytesRead} bytes`);
-          } catch (readError: any) {
-            console.error(`- Read test failed: ${readError.message || readError}`);
-          }
-
-          // Copy of every uploaded file, written only when explicitly enabled.
-          if (process.env.PRINTIFY_MCP_DEBUG) try {
-            const debugDir = path.join(process.cwd(), 'debug');
-            if (!fs.existsSync(debugDir)) {
-              fs.mkdirSync(debugDir, { recursive: true });
-            }
-
-            const debugFilePath = path.join(debugDir, `upload_${Date.now()}_${path.basename(filePath)}`);
-            fs.copyFileSync(filePath, debugFilePath);
-            console.error(`- Debug copy: ${debugFilePath}`);
-          } catch (copyError: any) {
-            console.error(`- Debug copy failed: ${copyError.message || copyError}`);
-          }
-        } else {
-          console.error(`ERROR: File does not exist at upload time: ${filePath}`);
-          throw new Error(`File does not exist at upload time: ${filePath}`);
-        }
-      } catch (verifyError: any) {
-        console.error('Error verifying file before upload:', verifyError);
-        throw new Error(`Failed to verify file before upload: ${verifyError.message || verifyError}`, { cause: verifyError });
-      }
+      await verifyFileReadable(filePath);
 
       // Upload to Printify
       console.error(`Attempting to upload file to Printify: ${filePath}`);
@@ -217,65 +307,7 @@ export async function uploadImageToPrintify(
 
     // Add file-specific diagnostics if it's a file
     if (sourceType === 'file') {
-      const filePath = validateFilePath(normalizeFilePath(source), 'read');
-      const fileInfo = getFileInfo(filePath);
-      diagnosticInfo.FileExists = fileInfo.exists;
-      diagnosticInfo.FileSize = fileInfo.exists ? fileInfo.size + ' bytes' : 'N/A';
-
-      // Try to get more file details if it exists
-      if (fileInfo.exists) {
-        try {
-          // Use dynamic imports for fs
-          const fsPromise = import('fs');
-          const pathPromise = import('path');
-
-          // Wait for imports to complete
-          const [fsModule, pathModule] = await Promise.all([fsPromise, pathPromise]);
-          const fs = fsModule.default || fsModule;
-          const path = pathModule.default || pathModule;
-
-          const stats = fs.statSync(filePath);
-          diagnosticInfo.FileCreated = stats.birthtime;
-          diagnosticInfo.FileModified = stats.mtime;
-          diagnosticInfo.FilePermissions = stats.mode.toString(8);
-          diagnosticInfo.AbsolutePath = path.resolve(filePath);
-
-          // Try to read the first few bytes to verify content
-          try {
-            const buffer = Buffer.alloc(10);
-            const fd = fs.openSync(filePath, 'r');
-            // Read the first 10 bytes
-            const bytesRead = fs.readSync(fd, buffer, 0, 10, 0);
-            fs.closeSync(fd);
-            diagnosticInfo.FileReadable = true;
-            diagnosticInfo.BytesRead = bytesRead;
-            diagnosticInfo.FileFirstBytes = buffer.toString('hex').substring(0, 20);
-
-            // Check file signature to determine if it's a valid image
-            const hexSignature = buffer.toString('hex').substring(0, 8).toLowerCase();
-            let fileType = 'unknown';
-
-            // Check common image signatures
-            if (hexSignature.startsWith('89504e47')) {
-              fileType = 'PNG';
-            } else if (hexSignature.startsWith('ffd8ffe')) {
-              fileType = 'JPEG';
-            } else if (hexSignature.startsWith('52494646')) {
-              fileType = 'WEBP';
-            } else if (hexSignature.startsWith('3c737667')) {
-              fileType = 'SVG';
-            }
-
-            diagnosticInfo.DetectedFileType = fileType;
-            diagnosticInfo.FileSignature = hexSignature;
-          } catch (readError: any) {
-            diagnosticInfo.FileReadable = false;
-            diagnosticInfo.FileReadError = readError.message || String(readError);
-          }
-        } catch (statError: any) {
-          diagnosticInfo.FileStatError = statError.message || String(statError);
-        }
-      }
+      await addFileDiagnostics(diagnosticInfo, source);
     }
 
     // Add error details if available

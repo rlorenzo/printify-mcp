@@ -11,6 +11,45 @@ export interface PrintifyShop {
 }
 
 // Printify API client
+/**
+ * Build one Printify print-area entry: the given variants plus a centred,
+ * unrotated, unscaled placeholder per position.
+ *
+ * Shared by product creation and update, which format print areas identically;
+ * they differ only in whether the entry is appended or replaces the list.
+ */
+function buildPrintAreaEntry(variantIds: any[], printAreasData: Record<string, any>): any {
+  return {
+    variant_ids: variantIds,
+    placeholders: Object.values(printAreasData).map((area: any) => ({
+      position: area.position,
+      images: [{
+        id: area.image_id || area.imageId,
+        x: 0.5,
+        y: 0.5,
+        scale: 1,
+        angle: 0
+      }]
+    }))
+  };
+}
+
+/**
+ * Normalize tool-shaped variants to the API's wire shape.
+ *
+ * Callers supply { variantId | id, price, isEnabled }; the API expects
+ * { id, price, is_enabled } with numeric ids and prices. Shared by create and
+ * update, which previously disagreed: update passed variants through raw, so
+ * an update carrying variants sent `variantId` to an API that reads `id`.
+ */
+function formatVariants(variants: any[]): any[] {
+  return variants.map((variant: any) => ({
+    id: parseInt(variant.id || variant.variantId),
+    price: parseInt(variant.price),
+    is_enabled: variant.isEnabled !== false
+  }));
+}
+
 export class PrintifyAPI {
   private client: any;
   private apiToken: string;
@@ -65,7 +104,7 @@ export class PrintifyAPI {
               accessToken: this.apiToken,
               shopId: this.shopId,
               enableLogging: false,
-      timeout: 60000
+              timeout: 60000
             });
           }
         } else {
@@ -208,13 +247,7 @@ export class PrintifyAPI {
 
       // Format variants
       if (productData.variants && Array.isArray(productData.variants)) {
-        formattedData.variants = productData.variants.map((variant: any) => {
-          return {
-            id: parseInt(variant.id || variant.variantId),
-            price: parseInt(variant.price),
-            is_enabled: variant.isEnabled !== false
-          };
-        });
+        formattedData.variants = formatVariants(productData.variants);
       }
 
       // Log the raw data received
@@ -227,30 +260,7 @@ export class PrintifyAPI {
         const variantIds = formattedData.variants.map((v: any) => v.id);
 
         // Create a print area entry with all variants
-        const printAreaEntry: any = {
-          variant_ids: variantIds,
-          placeholders: []
-        };
-
-        // Add placeholders for each position (front, back, etc.)
-        for (const key in printAreasData) {
-          const area = printAreasData[key];
-          printAreaEntry.placeholders.push({
-            position: area.position,
-            images: [
-              {
-                id: area.image_id || area.imageId,
-                x: 0.5,
-                y: 0.5,
-                scale: 1,
-                angle: 0
-              }
-            ]
-          });
-        }
-
-        // Add the print area entry to the formatted data
-        formattedData.print_areas.push(printAreaEntry);
+        formattedData.print_areas.push(buildPrintAreaEntry(variantIds, printAreasData));
       }
 
       console.error(`Creating product with shop ID: ${this.shopId}`);
@@ -291,6 +301,11 @@ export class PrintifyAPI {
     }
 
     try {
+      // Variants must be normalized whether or not print areas are present.
+      if (productData.variants && Array.isArray(productData.variants)) {
+        productData = { ...productData, variants: formatVariants(productData.variants) };
+      }
+
       // Format the product data if it contains print_areas
       if (productData.print_areas || productData.printAreas) {
         const formattedData = { ...productData };
@@ -318,30 +333,7 @@ export class PrintifyAPI {
           }
 
           // Create a print area entry with all variants
-          const printAreaEntry: any = {
-            variant_ids: variantIds,
-            placeholders: []
-          };
-
-          // Add placeholders for each position (front, back, etc.)
-          for (const key in printAreasData) {
-            const area = printAreasData[key];
-            printAreaEntry.placeholders.push({
-              position: area.position,
-              images: [
-                {
-                  id: area.image_id || area.imageId,
-                  x: 0.5,
-                  y: 0.5,
-                  scale: 1,
-                  angle: 0
-                }
-              ]
-            });
-          }
-
-          // Replace the print_areas with the correctly formatted version
-          formattedData.print_areas = [printAreaEntry];
+          formattedData.print_areas = [buildPrintAreaEntry(variantIds, printAreasData)];
 
           // Remove the printAreas property if it exists
           if (formattedData.printAreas) {
@@ -482,8 +474,10 @@ export class PrintifyAPI {
 
           // Handle file:// protocol
           let filePath = source;
-          if (source.startsWith('file:///')) {
-            filePath = source.replace('file:///', '');
+          if (source.startsWith('file://')) {
+            // Strip only the scheme: file:///Users/x is the absolute path
+            // /Users/x, so the third slash must survive.
+            filePath = source.slice('file://'.length);
           }
 
           // Strip the leading slash only from Windows paths of the form /C:/...
@@ -585,12 +579,6 @@ export class PrintifyAPI {
           detailedError += '3. Try using a URL or base64 encoded string instead\n';
           detailedError += '\nFile processing details:\n';
           detailedError += `- Attempted to read from: ${source}\n`;
-          detailedError += `- Current working directory: ${process.cwd()}\n`;
-
-          // Add stack trace
-          if (error.stack) {
-            detailedError += `\nStack trace:\n${error.stack}\n`;
-          }
 
           throw new Error(detailedError, { cause: error });
         }

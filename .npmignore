@@ -2,7 +2,6 @@
 src/
 
 # Development files
-.eslintrc.json
 .gitignore
 tsconfig.json
 

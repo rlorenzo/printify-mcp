@@ -2,7 +2,7 @@
 /**
  * Available models with their capabilities
  */
-export const AVAILABLE_MODELS = [
+const AVAILABLE_MODELS = [
   {
     id: "black-forest-labs/flux-1.1-pro",
     name: "Flux 1.1 Pro",

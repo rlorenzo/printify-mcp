@@ -56,6 +56,7 @@ async initialize(): Promise<PrintifyShop[]>
 - Returns: A promise that resolves to an array of shops
 
 This method:
+
 1. Fetches shops from the Printify API
 2. Stores the shops in the `shops` property
 3. Sets the first shop as the default if no shop ID was provided
@@ -103,6 +104,7 @@ setShopId(shopId: string)
 - `shopId`: The ID of the shop to use
 
 This method:
+
 1. Sets the shop ID
 2. Creates a new client instance with the new shop ID (required by the SDK)
 
@@ -151,6 +153,7 @@ async createProduct(productData: any)
 - Returns: A promise that resolves to the created product
 
 This method:
+
 1. Formats the product data to match the API's expected format
 2. Handles variants and print areas
 3. Calls the Printify API to create the product
@@ -169,6 +172,7 @@ async updateProduct(productId: string, productData: any)
 - Returns: A promise that resolves to the updated product
 
 This method:
+
 1. Formats the product data if it contains print areas
 2. Handles variants and print areas
 3. Calls the Printify API to update the product
@@ -254,6 +258,7 @@ private enhanceError(error: any, requestData?: any): any
 - Returns: The enhanced error
 
 This method:
+
 1. Extracts detailed error information from the response
 2. Adds status code, validation errors, and request data
 3. Logs the complete error response for debugging
@@ -271,6 +276,7 @@ async uploadImage(fileName: string, source: string)
 - Returns: A promise that resolves to the uploaded image details
 
 This method:
+
 1. Determines the type of source (URL, file path, or base64 data)
 2. Handles each type appropriately:
    - For URLs, uses the URL upload method

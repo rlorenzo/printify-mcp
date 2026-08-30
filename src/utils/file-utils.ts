@@ -3,6 +3,7 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
+import { randomBytes } from 'crypto';
 
 /**
  * Ensure a directory exists, creating it if necessary
@@ -25,8 +26,10 @@ export function generateTempFilePath(
   // Ensure the directory exists
   ensureDirectoryExists(baseDir);
 
-  // Generate a unique filename with timestamp
-  const uniqueFileName = `${Date.now()}_${fileName}.${extension}`;
+  // Timestamp alone collides when two files are generated in the same
+  // millisecond, so mix in a random suffix.
+  const suffix = randomBytes(4).toString('hex');
+  const uniqueFileName = `${Date.now()}_${suffix}_${fileName}.${extension}`;
   return path.resolve(path.join(baseDir, uniqueFileName));
 }
 

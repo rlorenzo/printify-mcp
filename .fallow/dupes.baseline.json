@@ -1,0 +1,23 @@
+{
+  "clone_groups": [
+    "src/tools.ts:768-792|src/tools.ts:961-985",
+    "src/tools.ts:236-243|src/tools.ts:275-282",
+    "src/services/printify-products.ts:130-151|src/services/printify-products.ts:202-223",
+    "src/tools.ts:491-499|src/tools.ts:570-578",
+    "src/tools.ts:716-722|src/tools.ts:931-937"
+  ],
+  "clone_fingerprints": [
+    "dup:97c3b2e3:2",
+    "dup:37d91f6d:2",
+    "dup:a211352d:2",
+    "dup:b208e099:2",
+    "dup:30ed804a:2"
+  ],
+  "normalized_clone_fingerprints": [
+    "dup:c77b3abb6f87acd9-2:2",
+    "dup:c77b3abb6f87acd9-4:2",
+    "dup:c77b3abb6f87acd9-1:2",
+    "dup:c77b3abb6f87acd9-3:2",
+    "dup:c77b3abb6f87acd9-5:2"
+  ]
+}

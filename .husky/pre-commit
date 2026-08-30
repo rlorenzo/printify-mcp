@@ -1,0 +1,22 @@
+# Fast checks only — the full build/test matrix runs in CI.
+npx lint-staged
+
+# Regression gate: fails on dead code, duplication or complexity that THIS
+# change introduces. Pre-existing findings are inherited from the committed
+# baselines and do not block.
+#
+# Coverage is passed when a report is present: CRAP is complexity weighted by
+# coverage, and without real data fallow estimates it from export references.
+# Run `npm run test:coverage` first for an accurate gate.
+if [ -f coverage/coverage-final.json ]; then
+  npx fallow audit --format compact \
+    --coverage coverage/coverage-final.json \
+    --health-baseline .fallow/health.baseline.json \
+    --dupes-baseline .fallow/dupes.baseline.json \
+    --dead-code-baseline .fallow/dead-code.baseline.json
+else
+  npx fallow audit --format compact \
+    --health-baseline .fallow/health.baseline.json \
+    --dupes-baseline .fallow/dupes.baseline.json \
+    --dead-code-baseline .fallow/dead-code.baseline.json
+fi

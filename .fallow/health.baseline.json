@@ -1,0 +1,40 @@
+{
+  "finding_counts": {
+    "src/model-manager.ts": {
+      "complexity_moderate": {
+        "count": 2
+      }
+    },
+    "src/printify-api.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "src/replicate-output.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "src/services/printify-uploader.ts": {
+      "complexity_critical": {
+        "count": 1
+      }
+    },
+    "src/tools.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "complexity_moderate": {
+        "count": 1
+      }
+    }
+  },
+  "runtime_coverage_findings": [],
+  "target_keys": [
+    "src/printify-api.ts:complexity",
+    "src/services/printify-uploader.ts:complexity"
+  ]
+}

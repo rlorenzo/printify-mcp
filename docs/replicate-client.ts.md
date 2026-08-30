@@ -25,6 +25,7 @@ constructor(apiToken: string)
 - `apiToken`: The Replicate API token
 
 The constructor:
+
 1. Initializes the Replicate client with the API token
 2. Creates a temporary directory for downloaded images if it doesn't exist
 
@@ -48,6 +49,7 @@ async generateImage(prompt: string, options: any = {}): Promise<string>
 - Returns: A promise that resolves to the path of the generated image file
 
 This method:
+
 1. Sets up the input parameters for the model, including:
    - `prompt`: The text prompt
    - `prompt_upsampling`: Always set to true
@@ -75,6 +77,7 @@ async processImageForPrintify(inputPath: string, outputFilename: string): Promis
 - Returns: A promise that resolves to the path of the processed image ready for Printify upload
 
 This method:
+
 1. Generates a temporary file path for the output
 2. Processes the image with Sharp to ensure it's a valid PNG for Printify
 3. Returns the path to the processed image
@@ -91,6 +94,7 @@ async cleanupTempFiles(filePaths: string[]): Promise<void>
 - Returns: A promise that resolves when all files are deleted
 
 This method:
+
 1. Iterates through the file paths
 2. Deletes each file if it exists
 3. Logs errors but continues with other files even if one fails

@@ -11,7 +11,17 @@ test-*.js
 *.png
 *.jpg
 *.jpeg
-*.webp.env.*
+*.webp
+.env.*
 !.env.example
 debug/
 temp/
+
+# fallow: ignore analysis caches, but track the committed regression baselines
+.fallow/cache/
+.fallow/*.json
+!.fallow/*.baseline.json
+
+# test coverage output
+coverage/
+.tmp-test/

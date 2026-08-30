@@ -1,6 +1,7 @@
 import sharp from 'sharp';
 import Replicate from 'replicate';
-import axios from 'axios';
+import { toApiOptions, coerceOutputToBuffer } from './replicate-output.js';
+import { applyOutputFormat } from './services/image-format.js';
 import { DefaultsManager } from './model-manager.js';
 
 export class ReplicateClient {
@@ -78,26 +79,7 @@ export class ReplicateClient {
    */
   async generateImage(prompt: string, options: any = {}, modelId?: string): Promise<Buffer> {
     try {
-      // Convert camelCase options to snake_case for the API
-      const apiOptions: any = {};
-
-      // Map common options
-      if (options.aspectRatio) apiOptions.aspect_ratio = options.aspectRatio;
-      if (options.width) apiOptions.width = options.width;
-      if (options.height) apiOptions.height = options.height;
-      if (options.seed !== undefined) apiOptions.seed = options.seed;
-      if (options.numInferenceSteps) apiOptions.num_inference_steps = options.numInferenceSteps;
-      if (options.guidanceScale) apiOptions.guidance_scale = options.guidanceScale;
-      if (options.negativePrompt) apiOptions.negative_prompt = options.negativePrompt;
-      // Always set output_format, defaulting to png unless explicitly specified
-      apiOptions.output_format = options.outputFormat || "png";
-      if (options.safetyTolerance !== undefined) apiOptions.safety_tolerance = options.safetyTolerance;
-
-      // Map model-specific options
-      if (options.promptUpsampling !== undefined) apiOptions.prompt_upsampling = options.promptUpsampling;
-      if (options.outputQuality !== undefined) apiOptions.output_quality = options.outputQuality;
-      if (options.raw !== undefined) apiOptions.raw = options.raw;
-      if (options.imagePromptStrength !== undefined) apiOptions.image_prompt_strength = options.imagePromptStrength;
+      const apiOptions = toApiOptions(options);
 
       // Use the defaults manager to prepare the input with merged options
       const mergedOptions = { ...options, ...apiOptions };
@@ -111,121 +93,32 @@ export class ReplicateClient {
 
       console.error('Replicate output type:', output ? (output.constructor ? output.constructor.name : typeof output) : 'null');
 
-      // Handle different output types from Replicate
-      let imageData: Buffer;
+      const imageData = await coerceOutputToBuffer(output);
 
-      if (output === null || output === undefined) {
-        throw new Error('Replicate returned null or undefined output');
-      } else if (typeof output === 'string') {
-        // If output is a URL, download the image
-        console.error('Replicate returned a string (URL):', output);
-        const response = await axios.get(output, { responseType: 'arraybuffer' });
-        imageData = Buffer.from(response.data);
-      } else if (Buffer.isBuffer(output)) {
-        // If output is already a Buffer
-        console.error('Replicate returned a Buffer');
-        imageData = output;
-      } else if (output instanceof Uint8Array) {
-        // If output is a Uint8Array
-        console.error('Replicate returned a Uint8Array');
-        imageData = Buffer.from(output);
-      } else if (output instanceof ArrayBuffer) {
-        // If output is an ArrayBuffer
-        console.error('Replicate returned an ArrayBuffer');
-        imageData = Buffer.from(new Uint8Array(output));
-      } else if (typeof output === 'object' && output !== null) {
-        // If output is a FileOutput object or similar
-        console.error('Replicate returned an object:', Object.keys(output));
-
-        // Try to get the file content
-        if ('file' in output && output.file) {
-          console.error('Object has a file property');
-          // Use type assertion to handle FileOutput object
-          const fileContent = await (output.file as any).arrayBuffer();
-          imageData = Buffer.from(fileContent);
-        } else if ('arrayBuffer' in output && typeof output.arrayBuffer === 'function') {
-          console.error('Object has an arrayBuffer method');
-          // Use type assertion for the arrayBuffer method
-          const arrayBuffer = await (output as any).arrayBuffer();
-          imageData = Buffer.from(arrayBuffer);
-        } else if ('blob' in output && typeof output.blob === 'function') {
-          console.error('Object has a blob method');
-          // Use type assertion for the blob method
-          const blob = await (output as any).blob();
-          const arrayBuffer = await (blob as any).arrayBuffer();
-          imageData = Buffer.from(arrayBuffer);
-        } else if ('text' in output && typeof output.text === 'function') {
-          console.error('Object has a text method');
-          // Use type assertion for the text method
-          const text = await (output as any).text();
-          // If the text is a URL, download the image
-          if (text.startsWith('http')) {
-            const response = await axios.get(text, { responseType: 'arraybuffer' });
-            imageData = Buffer.from(response.data);
-          } else {
-            imageData = Buffer.from(text);
-          }
-        } else {
-          // Last resort: try to stringify the object and see if it's a URL
-          const str = output.toString();
-          console.error('Object toString():', str);
-          if (str.startsWith('http')) {
-            const response = await axios.get(str, { responseType: 'arraybuffer' });
-            imageData = Buffer.from(response.data);
-          } else {
-            throw new Error(`Unsupported Replicate output type: ${output.constructor ? output.constructor.name : typeof output}`);
-          }
-        }
-      } else {
-        throw new Error(`Unsupported Replicate output type: ${typeof output}`);
-      }
-
-      return imageData;
-    } catch (error: any) {
-      // Provide detailed error information
-      const errorDetails = {
-        message: error.message,
-        prompt: prompt,
-        options: JSON.stringify(options),
-        modelId: modelId || this.getDefault('model')
-      };
-
-      throw new Error(`Replicate API error: ${error.message}\nDetails: ${JSON.stringify(errorDetails, null, 2)}`, { cause: error });
-    }
-  }
-
-  /**
-   * Process an image with Sharp to ensure it's a valid PNG for Printify
-   * @param imageData The image data buffer from Replicate
-   * @param outputFormat The desired output format (png, jpeg, webp)
-   * @returns A buffer containing the processed image
-   */
-  async processImageForPrintify(imageData: Buffer, outputFormat: string = 'png'): Promise<Buffer> {
-    // Ensure outputFormat is always defined and defaults to png
-    outputFormat = outputFormat || 'png';
-    try {
-      console.error(`Processing image with Sharp to ${outputFormat} format`);
-
-      // Process the image with Sharp to ensure it's valid for Printify
-      let sharpInstance = sharp(imageData);
-
-      // Apply format-specific options
-      if (outputFormat === 'png') {
-        sharpInstance = sharpInstance.png({ quality: 100 });
-      } else if (outputFormat === 'jpeg' || outputFormat === 'jpg') {
-        sharpInstance = sharpInstance.jpeg({ quality: 100 });
-      } else if (outputFormat === 'webp') {
-        sharpInstance = sharpInstance.webp({ quality: 100 });
-      }
+      // Re-encode so Printify always receives a valid image in the requested
+      // format. toApiOptions guarantees output_format is set.
+      const outputFormat = apiOptions.output_format;
+      const sharpInstance = applyOutputFormat(sharp(imageData), outputFormat);
 
       // Get the processed image as a buffer
       const processedBuffer = await sharpInstance.toBuffer();
       console.error(`Image processed successfully, buffer size: ${processedBuffer.length} bytes`);
 
       return processedBuffer;
-    } catch (error) {
-      console.error('Error processing image for Printify:', error);
-      throw error;
+    } catch (error: any) {
+      // Surface what was asked for alongside the failure; the underlying error
+      // stays attached as the cause.
+      const errorDetails = {
+        message: error.message,
+        prompt,
+        options: JSON.stringify(options),
+        modelId: modelId || this.getDefault('model')
+      };
+
+      throw new Error(
+        `Replicate API error: ${error.message}\nDetails: ${JSON.stringify(errorDetails, null, 2)}`,
+        { cause: error }
+      );
     }
   }
 

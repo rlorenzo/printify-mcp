@@ -1,0 +1,20 @@
+{
+  "globs": ["**/*.md"],
+
+  // src/docs/*.md are runtime payloads served by the how_to_use tool, not project
+  // documentation. Reformatting them changes what the tool returns, so they are
+  // excluded rather than linted.
+  "ignores": ["node_modules/**", "dist/**", "src/docs/**", "CHANGELOG.md"],
+  "config": {
+    "default": true,
+    // Prose is wrapped for readability, not to a column limit.
+    "MD013": false,
+    // Duplicate headings are legitimate under different parent sections.
+    "MD024": { "siblings_only": true },
+    // Numbered steps continue across fenced code blocks, which breaks list
+    // continuity for the parser. The rendered numbering is correct; renumbering
+    // the source to satisfy the rule would make it wrong.
+    "MD029": false,
+    "MD033": false
+  }
+}
