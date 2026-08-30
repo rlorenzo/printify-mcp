@@ -3,9 +3,6 @@
  */
 
 /**
- * Format an error response for tool output
- */
-/**
  * Render a key/value map as markdown bullets.
  *
  * Strings that already contain quotes are emitted verbatim so pre-quoted values
@@ -23,6 +20,9 @@ function formatFields(fields: Record<string, any>): string {
   }).join('');
 }
 
+/**
+ * Format an error response for tool output
+ */
 export function formatErrorResponse(
   error: any,
   step: string,
