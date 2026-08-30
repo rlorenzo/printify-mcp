@@ -5,6 +5,7 @@
 import sharp from 'sharp';
 import { ReplicateClient } from '../replicate-client.js';
 import { formatErrorResponse } from '../utils/error-handler.js';
+import { buildModelOptions, mimeTypeFor, withExtension, applyOutputFormat } from './image-format.js';
 
 /**
  * Generate an image using Replicate and process it with Sharp
@@ -18,36 +19,7 @@ export async function generateImage(
   // No need to track files anymore since we're keeping everything in memory
 
   try {
-    // Prepare options with proper naming for the API
-    const modelOptions: any = {};
-
-    // Set aspect ratio or dimensions
-    if (options.aspectRatio) {
-      modelOptions.aspectRatio = options.aspectRatio;
-    } else {
-      // If no aspect ratio is provided, use width and height
-      // These will be overridden by the defaults in the DefaultsManager if not provided
-      modelOptions.width = options.width || 1024;
-      modelOptions.height = options.height || 1024;
-    }
-
-    // Add common parameters
-    if (options.numInferenceSteps) modelOptions.numInferenceSteps = options.numInferenceSteps;
-    if (options.guidanceScale) modelOptions.guidanceScale = options.guidanceScale;
-    if (options.negativePrompt) modelOptions.negativePrompt = options.negativePrompt;
-    if (options.seed !== undefined) modelOptions.seed = options.seed;
-    // Always set outputFormat, defaulting to png unless explicitly specified
-    modelOptions.outputFormat = options.outputFormat || "png";
-    if (options.safetyTolerance !== undefined) modelOptions.safetyTolerance = options.safetyTolerance;
-
-    // Add model-specific parameters if provided
-    if (options.promptUpsampling !== undefined) modelOptions.promptUpsampling = options.promptUpsampling;
-    if (options.outputQuality !== undefined) modelOptions.outputQuality = options.outputQuality;
-    if (options.raw !== undefined) modelOptions.raw = options.raw;
-    if (options.imagePromptStrength !== undefined) modelOptions.imagePromptStrength = options.imagePromptStrength;
-
-    // Add model override if provided
-    if (options.model) modelOptions.model = options.model;
+    const modelOptions = buildModelOptions(options);
 
     // Get the current default model for informational purposes
     const defaultModel = replicateClient.getDefaultModel();
@@ -65,36 +37,14 @@ export async function generateImage(
 
     // Get the output format from options (already defaulted to png earlier)
     const outputFormat = modelOptions.outputFormat;
-    let mimeType: string;
-
-    if (outputFormat === 'jpeg' || outputFormat === 'jpg') {
-      mimeType = 'image/jpeg';
-    } else if (outputFormat === 'webp') {
-      mimeType = 'image/webp';
-    } else {
-      // Default to PNG
-      mimeType = 'image/png';
-    }
-
-    // Process with Sharp and get buffer directly
-    let sharpInstance = sharp(imageBuffer);
-
-    // Apply format-specific options
-    if (outputFormat === 'png') {
-      sharpInstance = sharpInstance.png({ quality: 100 });
-    } else if (outputFormat === 'jpeg' || outputFormat === 'jpg') {
-      sharpInstance = sharpInstance.jpeg({ quality: 100 });
-    } else if (outputFormat === 'webp') {
-      sharpInstance = sharpInstance.webp({ quality: 100 });
-    }
+    const mimeType = mimeTypeFor(outputFormat);
+    const sharpInstance = applyOutputFormat(sharp(imageBuffer), outputFormat);
 
     // Get the processed image as a buffer
     const processedBuffer = await sharpInstance.toBuffer();
     console.error(`Image processed successfully, buffer size: ${processedBuffer.length} bytes`);
 
-    // Determine the final filename with extension
-    const fileExtension = outputFormat === 'jpeg' ? 'jpg' : outputFormat;
-    const finalFileName = fileName.endsWith(`.${fileExtension}`) ? fileName : `${fileName}.${fileExtension}`;
+    const finalFileName = withExtension(fileName, outputFormat);
 
     // No need to clean up files since we're keeping everything in memory
 

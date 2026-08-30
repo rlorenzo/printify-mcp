@@ -64,12 +64,23 @@ jobs:
 
       - run: npm ci
 
+      # CRAP combines complexity with coverage. Without real coverage data
+      # fallow estimates it from export references, which reports functions as
+      # critical purely because it cannot see their tests.
+      - name: Build and collect coverage
+        run: npm run build && npm run test:coverage
+
       # Fails only on dead code, duplication or complexity introduced by this
       # change. Pre-existing findings are inherited from the committed baselines
       # and do not block unrelated work.
       - name: Audit changed files
-        run: npx fallow audit --format github-annotations --gate new-only
+        run: |
+          npx fallow audit --format github-annotations --gate new-only \
+            --coverage coverage/coverage-final.json \
+            --health-baseline .fallow/health.baseline.json \
+            --dupes-baseline .fallow/dupes.baseline.json \
+            --dead-code-baseline .fallow/dead-code.baseline.json
 
       - name: Job summary
         if: always()
-        run: npx fallow audit --format github-summary >> "$GITHUB_STEP_SUMMARY"
+        run: npx fallow audit --format github-summary --coverage coverage/coverage-final.json >> "$GITHUB_STEP_SUMMARY"

@@ -12,9 +12,10 @@ import { getFileInfo, validateFilePath } from '../utils/file-utils.js';
 function normalizeFilePath(filePath: string): string {
   let normalizedPath = filePath;
 
-  // Handle file:/// URLs
-  if (normalizedPath.startsWith('file:///')) {
-    normalizedPath = normalizedPath.replace('file:///', '');
+  // Handle file:// URLs. Strip only the scheme: file:///Users/x is the
+  // absolute path /Users/x, so the third slash must survive.
+  if (normalizedPath.startsWith('file://')) {
+    normalizedPath = normalizedPath.slice('file://'.length);
   }
 
   // Handle leading slash on Windows
@@ -41,6 +42,67 @@ export function determineImageSourceType(source: string): 'url' | 'file' | 'base
 
   // Otherwise assume it's base64
   return 'base64';
+}
+
+/**
+ * Confirm a file is present and readable before handing it to the SDK, logging
+ * what was observed.
+ *
+ * Diagnostics only, plus the one throw that matters: an upload of a file that
+ * vanished between validation and use fails here with a clear message rather
+ * than inside the SDK.
+ */
+async function verifyFileReadable(filePath: string): Promise<void> {
+  try {
+    const fs = await import('fs');
+    const path = await import('path');
+
+    if (!fs.existsSync(filePath)) {
+      console.error(`ERROR: File does not exist at upload time: ${filePath}`);
+      throw new Error(`File does not exist at upload time: ${filePath}`);
+    }
+
+    const stats = fs.statSync(filePath);
+    console.error(`File verification before upload:`);
+    console.error(`- Path: ${filePath}`);
+    console.error(`- Absolute path: ${path.resolve(filePath)}`);
+    console.error(`- Size: ${stats.size} bytes`);
+    console.error(`- Created: ${stats.birthtime}`);
+    console.error(`- Permissions: ${stats.mode.toString(8)}`);
+
+    try {
+      fs.accessSync(filePath, fs.constants.R_OK);
+      console.error(`- Readable: Yes`);
+    } catch (e: any) {
+      console.error(`- Readable: No - ${e.message || e}`);
+    }
+
+    try {
+      const fd = fs.openSync(filePath, 'r');
+      const buffer = Buffer.alloc(10);
+      const bytesRead = fs.readSync(fd, buffer, 0, 10, 0);
+      fs.closeSync(fd);
+      console.error(`- Read test: Successfully read ${bytesRead} bytes`);
+    } catch (readError: any) {
+      console.error(`- Read test failed: ${readError.message || readError}`);
+    }
+
+    // Copy of every uploaded file, written only when explicitly enabled.
+    if (process.env.PRINTIFY_MCP_DEBUG) {
+      try {
+        const debugDir = path.join(process.cwd(), 'debug');
+        if (!fs.existsSync(debugDir)) fs.mkdirSync(debugDir, { recursive: true });
+        const debugFilePath = path.join(debugDir, `upload_${Date.now()}_${path.basename(filePath)}`);
+        fs.copyFileSync(filePath, debugFilePath);
+        console.error(`- Debug copy: ${debugFilePath}`);
+      } catch (copyError: any) {
+        console.error(`- Debug copy failed: ${copyError.message || copyError}`);
+      }
+    }
+  } catch (verifyError: any) {
+    console.error('Error verifying file before upload:', verifyError);
+    throw new Error(`Failed to verify file before upload: ${verifyError.message || verifyError}`, { cause: verifyError });
+  }
 }
 
 /**
@@ -82,60 +144,7 @@ export async function uploadImageToPrintify(
         throw new Error(`File is too large (${Math.round(fileInfo.size / (1024 * 1024))}MB). Maximum size is 20MB.`);
       }
 
-      // Verify the file exists and is readable before uploading
-      try {
-        // Use dynamic imports for fs and path
-        const fs = await import('fs');
-        const path = await import('path');
-
-        if (fs.existsSync(filePath)) {
-          const stats = fs.statSync(filePath);
-          console.error(`File verification before upload:`);
-          console.error(`- Path: ${filePath}`);
-          console.error(`- Absolute path: ${path.resolve(filePath)}`);
-          console.error(`- Size: ${stats.size} bytes`);
-          console.error(`- Created: ${stats.birthtime}`);
-          console.error(`- Permissions: ${stats.mode.toString(8)}`);
-
-          try {
-            fs.accessSync(filePath, fs.constants.R_OK);
-            console.error(`- Readable: Yes`);
-          } catch (e: any) {
-            console.error(`- Readable: No - ${e.message || e}`);
-          }
-
-          // Try to read the first few bytes to verify the file is readable
-          try {
-            const fd = fs.openSync(filePath, 'r');
-            const buffer = Buffer.alloc(10);
-            const bytesRead = fs.readSync(fd, buffer, 0, 10, 0);
-            fs.closeSync(fd);
-            console.error(`- Read test: Successfully read ${bytesRead} bytes`);
-          } catch (readError: any) {
-            console.error(`- Read test failed: ${readError.message || readError}`);
-          }
-
-          // Copy of every uploaded file, written only when explicitly enabled.
-          if (process.env.PRINTIFY_MCP_DEBUG) try {
-            const debugDir = path.join(process.cwd(), 'debug');
-            if (!fs.existsSync(debugDir)) {
-              fs.mkdirSync(debugDir, { recursive: true });
-            }
-
-            const debugFilePath = path.join(debugDir, `upload_${Date.now()}_${path.basename(filePath)}`);
-            fs.copyFileSync(filePath, debugFilePath);
-            console.error(`- Debug copy: ${debugFilePath}`);
-          } catch (copyError: any) {
-            console.error(`- Debug copy failed: ${copyError.message || copyError}`);
-          }
-        } else {
-          console.error(`ERROR: File does not exist at upload time: ${filePath}`);
-          throw new Error(`File does not exist at upload time: ${filePath}`);
-        }
-      } catch (verifyError: any) {
-        console.error('Error verifying file before upload:', verifyError);
-        throw new Error(`Failed to verify file before upload: ${verifyError.message || verifyError}`, { cause: verifyError });
-      }
+      await verifyFileReadable(filePath);
 
       // Upload to Printify
       console.error(`Attempting to upload file to Printify: ${filePath}`);
@@ -217,7 +226,14 @@ export async function uploadImageToPrintify(
 
     // Add file-specific diagnostics if it's a file
     if (sourceType === 'file') {
-      const filePath = validateFilePath(normalizeFilePath(source), 'read');
+      let filePath: string;
+      try {
+        filePath = validateFilePath(normalizeFilePath(source), 'read');
+      } catch {
+        // The path was refused; that is already the reported error. Diagnostics
+        // must not throw a second time and escape this handler.
+        filePath = normalizeFilePath(source);
+      }
       const fileInfo = getFileInfo(filePath);
       diagnosticInfo.FileExists = fileInfo.exists;
       diagnosticInfo.FileSize = fileInfo.exists ? fileInfo.size + ' bytes' : 'N/A';

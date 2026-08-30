@@ -1,29 +1,23 @@
 {
   "clone_groups": [
-    "src/tools.ts:1020-1044|src/tools.ts:739-763",
-    "src/replicate-client.ts:210-223|src/services/image-generator.ts:80-93",
-    "src/tools.ts:208-215|src/tools.ts:247-254",
+    "src/tools.ts:768-792|src/tools.ts:961-985",
+    "src/tools.ts:236-243|src/tools.ts:275-282",
     "src/services/printify-products.ts:130-151|src/services/printify-products.ts:202-223",
-    "src/tools.ts:463-471|src/tools.ts:542-550",
-    "src/services/printify-uploader.ts:120-125|src/tools.ts:799-805",
-    "src/tools.ts:688-694|src/tools.ts:990-996"
+    "src/tools.ts:491-499|src/tools.ts:570-578",
+    "src/tools.ts:716-722|src/tools.ts:931-937"
   ],
   "clone_fingerprints": [
     "dup:97c3b2e3:2",
-    "dup:f05aa86a:2",
     "dup:37d91f6d:2",
     "dup:a211352d:2",
     "dup:b208e099:2",
-    "dup:8c677220:2",
     "dup:30ed804a:2"
   ],
   "normalized_clone_fingerprints": [
-    "dup:c77b3abb6f87acd9-3:2",
-    "dup:c77b3abb6f87acd9-1:2",
-    "dup:c77b3abb6f87acd9-5:2",
     "dup:c77b3abb6f87acd9-2:2",
     "dup:c77b3abb6f87acd9-4:2",
-    "dup:c77b3abb6f87acd9-7:2",
-    "dup:c77b3abb6f87acd9-6:2"
+    "dup:c77b3abb6f87acd9-1:2",
+    "dup:c77b3abb6f87acd9-3:2",
+    "dup:c77b3abb6f87acd9-5:2"
   ]
 }

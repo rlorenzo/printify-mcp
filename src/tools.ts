@@ -11,6 +11,8 @@ import { z } from "zod";
 import { PrintifyAPI } from "./printify-api.js";
 import { ReplicateClient } from "./replicate-client.js";
 import { mergeGenerationOptions } from "./generation-options.js";
+import { stageOnImgbb, requiresImgbb, hasImgbbKey } from "./services/imgbb.js";
+import { saveDebugCopy } from "./services/image-format.js";
 
 /**
  * Clients shared with the tool handlers.
@@ -96,6 +98,32 @@ const imageGenerationOptions = {
   imagePromptStrength: z.number().optional()
     .describe("Image prompt strength 0-1 (Flux 1.1 Pro Ultra only)")
 } as const;
+
+/**
+ * Hand a generated image to Printify, by hosted URL when it was staged on
+ * ImgBB, otherwise as base64.
+ *
+ * The direct path sends a data URL so PrintifyAPI.uploadImage takes its base64
+ * branch; raw base64 would be mistaken for a file path.
+ */
+async function uploadGenerated(
+  client: PrintifyAPI,
+  fileName: string,
+  imageBuffer: Buffer,
+  mimeType: string | undefined,
+  uploadMethod: string,
+  imageUrl?: string
+): Promise<any> {
+  if (uploadMethod === 'imgbb' && imageUrl) {
+    const image = await client.uploadImage(fileName, imageUrl);
+    console.error(`Successfully uploaded image to Printify using ImgBB URL. Image ID: ${image.id}`);
+    return image;
+  }
+  const base64Data = imageBuffer.toString('base64');
+  const image = await client.uploadImage(fileName, `data:${mimeType ?? 'image/png'};base64,${base64Data}`);
+  console.error(`Successfully uploaded image to Printify using direct base64. Image ID: ${image.id}`);
+  return image;
+}
 
 /** Register every Printify tool and prompt on `server`. */
 export function registerTools(server: McpServer, ctx: PrintifyContext): void {
@@ -710,8 +738,9 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       // Determine which model to use (user-specified or default)
       const modelToUse = model || ctx.replicateClient.getDefaultModel();
 
-      // Check if ImgBB API key is set when using Ultra model
-      if (modelToUse.includes('flux-1.1-pro-ultra') && (!process.env.IMGBB_API_KEY || process.env.IMGBB_API_KEY === 'your-imgbb-api-key')) {
+      // Fail before generating: an Ultra image that cannot be staged is wasted
+      // spend.
+      if (requiresImgbb(modelToUse) && !hasImgbbKey(process.env.IMGBB_API_KEY)) {
         return {
           content: [{
             type: "text",
@@ -790,48 +819,13 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
         `- Model used: ${usingModel}`
       ].join('\n');
 
-      // Copy of every generated image, written only when explicitly enabled.
-      if (process.env.PRINTIFY_MCP_DEBUG) try {
-        const fs = await import('fs');
-        const path = await import('path');
+      await saveDebugCopy(imageBuffer, finalFileName);
 
-        // Create a debug directory if it doesn't exist
-        const debugDir = path.join(process.cwd(), 'debug');
-        if (!fs.existsSync(debugDir)) {
-          fs.mkdirSync(debugDir, { recursive: true });
-        }
-
-        // Save the base64 data to a file for debugging
-        const debugFilePath = path.join(debugDir, `debug_${Date.now()}_${finalFileName}`);
-
-        // Save buffer directly to debug file
-        if (imageBuffer) {
-          fs.writeFileSync(debugFilePath, imageBuffer);
-          console.error(`Saved image data to debug file: ${debugFilePath}`);
-          console.error(`Debug file size: ${imageBuffer.length} bytes`);
-        } else {
-          console.error('No image data to save for debugging');
-        }
-      } catch (debugError) {
-        console.error('Error saving debug file:', debugError);
-      }
-
-      // Validate input data
-      if (!imageBuffer) {
+      if (!imageBuffer || !finalFileName) {
         return {
           content: [{
             type: "text",
-            text: "Error: No image data available for upload"
-          }],
-          isError: true
-        };
-      }
-
-      if (!finalFileName) {
-        return {
-          content: [{
-            type: "text",
-            text: "Error: No filename available for upload"
+            text: `Error: No ${imageBuffer ? 'filename' : 'image data'} available for upload`
           }],
           isError: true
         };
@@ -853,58 +847,15 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
         };
       }
 
-      // STEP 2: Prepare image for upload (either via ImgBB or direct base64)
-      let imageUrl;
-      let uploadMethod = "direct";
-
-      // Check if we're using the Ultra model
-      const isUsingUltraModel = usingModel.includes('flux-1.1-pro-ultra');
-
-      // Check if ImgBB API key is set
-      const imgbbApiKey = process.env.IMGBB_API_KEY;
-
-      if (imgbbApiKey && imgbbApiKey !== 'your-imgbb-api-key') {
-        // If ImgBB API key is set, use ImgBB to get a URL
-        try {
-          // Create form data for ImgBB
-          const formData = new FormData();
-          // Convert buffer to base64 for ImgBB upload
-          const base64Data = imageBuffer.toString('base64');
-          formData.append('image', base64Data);
-
-          // Upload to ImgBB with the key as a query parameter
-          const imgbbResponse = await axios.post(
-            `https://api.imgbb.com/1/upload?key=${imgbbApiKey}`,
-            formData
-          );
-
-          // Get the image URL from ImgBB response
-          imageUrl = imgbbResponse.data.data.url;
-          uploadMethod = "imgbb";
-
-          // Log success
-          console.error(`Successfully uploaded image to ImgBB. URL: ${imageUrl}`);
-        } catch (imgbbError: any) {
-          // Only fall back to direct upload if not using Ultra model
-          if (isUsingUltraModel) {
-            return {
-              content: [{
-                type: "text",
-                text: `Error uploading to ImgBB: ${imgbbError.message || String(imgbbError)}\n\n` +
-                      `When using the Ultra model, ImgBB upload is required and cannot be bypassed.\n\n` +
-                      `Response data: ${JSON.stringify(imgbbError.response?.data || {}, null, 2)}`
-              }],
-              isError: true
-            };
-          }
-
-          console.error(`Error uploading to ImgBB: ${imgbbError.message || String(imgbbError)}. Falling back to direct base64 upload.`);
-          // Fall back to direct base64 upload for non-Ultra models
-          uploadMethod = "direct";
-        }
-      } else if (!isUsingUltraModel) {
-        console.error("No ImgBB API key found. Using direct base64 upload.");
+      // STEP 2: Stage on ImgBB when required or available.
+      const staged = await stageOnImgbb(imageBuffer, usingModel, {
+        axios, FormData, apiKey: process.env.IMGBB_API_KEY
+      });
+      if (staged.method === 'failed') {
+        return { content: [{ type: "text", text: staged.message }], isError: true };
       }
+      const uploadMethod = staged.method;
+      const imageUrl = staged.method === 'imgbb' ? staged.imageUrl : undefined;
 
       // STEP 4/5: Use the configured Printify client.
       // Constructing a second SDK client from process.env here would ignore a key
@@ -923,19 +874,9 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       console.error(`Uploading via configured Printify client (shop ${printifyForUpload.getCurrentShopId() || 'unset'})`);
 
       // STEP 6: Upload the image to Printify
-      let image;
+      let image: any;
       try {
-        if (uploadMethod === "imgbb" && imageUrl) {
-          // Upload using the URL from ImgBB
-          image = await printifyForUpload.uploadImage(finalFileName, imageUrl);
-          console.error(`Successfully uploaded image to Printify using ImgBB URL. Image ID: ${image.id}`);
-        } else {
-          // Direct base64 upload. Sent as a data URL so uploadImage() takes its
-          // base64 branch rather than treating the payload as a file path.
-          const base64Data = imageBuffer.toString('base64');
-          image = await printifyForUpload.uploadImage(finalFileName, `data:${mimeType};base64,${base64Data}`);
-          console.error(`Successfully uploaded image to Printify using direct base64. Image ID: ${image.id}`);
-        }
+        image = await uploadGenerated(printifyForUpload, finalFileName, imageBuffer, mimeType, uploadMethod, imageUrl);
       } catch (uploadError: any) {
         return {
           content: [{
