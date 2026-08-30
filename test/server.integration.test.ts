@@ -15,27 +15,51 @@ function rpc(requests: object[], timeoutMs = 6000): Promise<{ stdout: string; fr
       env: { ...process.env, PRINTIFY_API_KEY: '', REPLICATE_API_TOKEN: '' },
       stdio: ['pipe', 'pipe', 'pipe']
     });
+
+    const wantedIds = requests.map((r: any) => r.id).filter((id) => id !== undefined);
     let stdout = '';
     let handshakeDone = false;
+    let closing = false;
+    let forceKill: NodeJS.Timeout;
+
+    // Resolution always happens on 'close', never on a timer: the parent owns
+    // child.stdin, and leaving that pipe open keeps the vitest worker's event
+    // loop alive long after the assertions pass. Ending stdin is also the
+    // server's own shutdown signal, so SIGKILL is only a backstop.
+    const shutdown = () => {
+      if (closing) return;
+      closing = true;
+      clearTimeout(deadline);
+      child.stdin.end();
+      forceKill = setTimeout(() => child.kill('SIGKILL'), 1000);
+    };
+
+    child.once('close', () => {
+      clearTimeout(deadline);
+      clearTimeout(forceKill);
+      resolve({ stdout, frames: parseFrames(stdout) });
+    });
+
+    const deadline = setTimeout(shutdown, timeoutMs);
 
     // The protocol requires the initialize response before anything else is
-    // sent, so drive the rest of the session off that frame rather than a fixed
-    // delay that a slow machine can outrun.
+    // sent, so the session is driven by the frames that arrive rather than by a
+    // fixed delay a slow machine can outrun.
     child.stdout.on('data', (d) => {
       stdout += d;
-      if (handshakeDone || !stdout.split('\n').some(isInitializeResponse)) return;
-      handshakeDone = true;
-      child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
-      for (const r of requests.slice(1)) child.stdin.write(JSON.stringify(r) + '\n');
+      const frames = parseFrames(stdout);
+
+      if (!handshakeDone && frames.some((f) => f.id === 1 && f.result !== undefined)) {
+        handshakeDone = true;
+        child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
+        for (const r of requests.slice(1)) child.stdin.write(JSON.stringify(r) + '\n');
+      }
+
+      if (handshakeDone && wantedIds.every((id) => frames.some((f) => f.id === id))) shutdown();
     });
     child.stderr.on('data', () => { /* logs belong here; ignored */ });
 
     child.stdin.write(JSON.stringify(requests[0]) + '\n');
-
-    setTimeout(() => {
-      child.kill();
-      resolve({ stdout, frames: parseFrames(stdout) });
-    }, timeoutMs - 500);
   });
 }
 
@@ -48,15 +72,6 @@ function parseFrames(stdout: string): any[] {
   return stdoutLines(stdout)
     .map((l) => { try { return JSON.parse(l); } catch { return null; } })
     .filter(Boolean);
-}
-
-function isInitializeResponse(line: string): boolean {
-  try {
-    const frame = JSON.parse(line);
-    return frame?.id === 1 && frame?.result !== undefined;
-  } catch {
-    return false;
-  }
 }
 
 const init = {
