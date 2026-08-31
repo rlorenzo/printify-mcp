@@ -37,7 +37,7 @@
     "test:coverage": "vitest run --coverage",
     "analyze": "fallow --coverage coverage/coverage-final.json",
     "analyze:gate": "npm run test:coverage && fallow audit --format compact --gate new-only --coverage coverage/coverage-final.json --health-baseline .fallow/health.baseline.json --dupes-baseline .fallow/dupes.baseline.json --dead-code-baseline .fallow/dead-code.baseline.json",
-    "analyze:baseline": "npm run test:coverage && fallow dead-code --save-baseline .fallow/dead-code.baseline.json && fallow health --coverage coverage/coverage-final.json --save-baseline .fallow/health.baseline.json && fallow dupes --save-baseline .fallow/dupes.baseline.json",
+    "analyze:baseline": "npm run test:coverage && fallow dead-code --save-baseline .fallow/dead-code.baseline.json && fallow health --report-only --coverage coverage/coverage-final.json --save-baseline .fallow/health.baseline.json && fallow dupes --save-baseline .fallow/dupes.baseline.json",
     "verify": "npm run build && npm run lint:all && npm test",
     "prepare": "husky"
   },
