@@ -26,3 +26,4 @@ temp/
 coverage/
 .tmp-test/
 PLAN.md
+.review-pr-ignored-*
