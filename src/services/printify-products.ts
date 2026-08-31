@@ -139,10 +139,14 @@ export async function getProduct(
           Tags: product.tags ?? [],
           BlueprintId: product.blueprint_id ?? null,
           PrintProviderId: product.print_provider_id ?? null,
-          Visible: product.visible ?? false,
-          Locked: product.is_locked ?? false,
-          CreatedAt: product.created_at ?? '',
-          UpdatedAt: product.updated_at ?? '',
+          // null, not false or '', wherever the empty value is not a state the
+          // product can actually be in: Printify omits keys, and reporting an
+          // absent `visible` as false asserts the listing is hidden. Text
+          // fields keep '' because an empty description is a real state.
+          Visible: product.visible ?? null,
+          Locked: product.is_locked ?? null,
+          CreatedAt: product.created_at ?? null,
+          UpdatedAt: product.updated_at ?? null,
           VariantCount: variants.length,
           EnabledCount: enabled.length,
           // Only enabled variants: a blueprint can carry hundreds, and emitting

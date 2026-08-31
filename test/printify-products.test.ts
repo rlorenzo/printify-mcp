@@ -140,6 +140,22 @@ describe('getProduct', () => {
     expect(text).not.toContain('"id":103');
   });
 
+  // Printify omits keys rather than sending empty values, so a default of
+  // false would report an absent `visible` as a hidden listing.
+  it('distinguishes an absent flag from a false one', async () => {
+    const absent = await getProduct(productClient({ id: 'p', title: 'T' }), 'p');
+    expect(absent.response.content[0].text).toContain('**Visible**: null');
+    expect(absent.response.content[0].text).toContain('**Locked**: null');
+
+    const hidden = await getProduct(productClient(fakeProduct({ visible: false })), 'prod1');
+    expect(hidden.response.content[0].text).toContain('**Visible**: "false"');
+  });
+
+  it('reports an absent timestamp as null rather than empty', async () => {
+    const result = await getProduct(productClient({ id: 'p', title: 'T' }), 'p');
+    expect(result.response.content[0].text).toContain('**CreatedAt**: null');
+  });
+
   it('surfaces print area image ids and placement', async () => {
     const result = await getProduct(productClient(), 'prod1');
     const text = result.response.content[0].text;
