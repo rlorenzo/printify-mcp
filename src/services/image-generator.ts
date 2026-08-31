@@ -4,7 +4,7 @@
 // No need to import fs anymore
 import sharp from 'sharp';
 import { ReplicateClient } from '../replicate-client.js';
-import { formatErrorResponse } from '../utils/error-handler.js';
+import { describeError, formatErrorResponse } from '../utils/error-handler.js';
 import { buildModelOptions, mimeTypeFor, withExtension } from './image-format.js';
 
 /**
@@ -60,7 +60,7 @@ export async function generateImage(
       dimensions
     };
   } catch (error: any) {
-    console.error('Error generating or processing image:', error);
+    console.error('Error generating or processing image:', describeError(error));
 
     // No need to clean up files since we're keeping everything in memory
 

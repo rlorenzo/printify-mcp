@@ -2,7 +2,7 @@
  * Printify products service for Printify MCP
  */
 import { PrintifyAPI } from '../printify-api.js';
-import { formatErrorResponse, formatSuccessResponse } from '../utils/error-handler.js';
+import { describeError, formatErrorResponse, formatSuccessResponse } from '../utils/error-handler.js';
 
 /**
  * A variant's pricing/availability as supplied by the caller.
@@ -86,7 +86,7 @@ export async function listProducts(
       )
     };
   } catch (error: any) {
-    console.error('Error listing products:', error);
+    console.error('Error listing products:', describeError(error));
 
     return {
       success: false,
@@ -186,7 +186,7 @@ export async function getProduct(
       )
     };
   } catch (error: any) {
-    console.error('Error getting product:', error);
+    console.error('Error getting product:', describeError(error));
 
     return {
       success: false,
@@ -239,7 +239,7 @@ export async function createProduct(
       )
     };
   } catch (error: any) {
-    console.error('Error creating product:', error);
+    console.error('Error creating product:', describeError(error));
 
     return {
       success: false,
@@ -298,7 +298,7 @@ export async function updateProduct(
       )
     };
   } catch (error: any) {
-    console.error('Error updating product:', error);
+    console.error('Error updating product:', describeError(error));
 
     return {
       success: false,
@@ -350,7 +350,7 @@ export async function deleteProduct(
       )
     };
   } catch (error: any) {
-    console.error('Error deleting product:', error);
+    console.error('Error deleting product:', describeError(error));
 
     return {
       success: false,
@@ -408,7 +408,7 @@ export async function publishProduct(
       )
     };
   } catch (error: any) {
-    console.error('Error publishing product:', error);
+    console.error('Error publishing product:', describeError(error));
 
     return {
       success: false,
