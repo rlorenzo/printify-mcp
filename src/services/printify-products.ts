@@ -5,6 +5,49 @@ import { PrintifyAPI } from '../printify-api.js';
 import { formatErrorResponse, formatSuccessResponse } from '../utils/error-handler.js';
 
 /**
+ * A variant's pricing/availability as supplied by the caller.
+ */
+interface ProductVariantInput {
+  variantId: number;
+  price: number;
+  isEnabled?: boolean;
+}
+
+/**
+ * Print areas, one entry per placement.
+ *
+ * The key is the caller's own label for the entry and never reaches Printify:
+ * buildPrintAreaEntry reads Object.values() and takes the placement from each
+ * value's `position`.
+ */
+type ProductPrintAreas = Record<string, {
+  position: string;
+  imageId: string;
+}>;
+
+/**
+ * Fields that can be changed on an existing product.
+ */
+interface UpdateProductData {
+  title?: string;
+  description?: string;
+  variants?: ProductVariantInput[];
+  printAreas?: ProductPrintAreas;
+  tags?: string[];
+}
+
+/**
+ * Everything needed to create a product; the shared fields are required here.
+ */
+interface CreateProductData extends UpdateProductData {
+  title: string;
+  description: string;
+  blueprintId: number;
+  printProviderId: number;
+  variants: ProductVariantInput[];
+}
+
+/**
  * List products from Printify
  */
 export async function listProducts(
@@ -83,6 +126,10 @@ export async function getProduct(
     // Get product
     const product = await printifyClient.getProduct(productId);
 
+    const variants: any[] = product.variants ?? [];
+    const enabled = variants.filter((v: any) => v.is_enabled);
+    const enabledById = new Map<number, any>(enabled.map((v: any) => [v.id, v]));
+
     return {
       success: true,
       product,
@@ -90,8 +137,51 @@ export async function getProduct(
         'Product Retrieved Successfully',
         {
           ProductId: productId,
-          Title: product.title,
-          Shop: currentShop
+          Title: product.title ?? '',
+          Shop: currentShop,
+          Description: product.description ?? '',
+          Tags: product.tags ?? [],
+          BlueprintId: product.blueprint_id ?? null,
+          PrintProviderId: product.print_provider_id ?? null,
+          // null, not false or '', wherever the empty value is not a state the
+          // product can actually be in: Printify omits keys, and reporting an
+          // absent `visible` as false asserts the listing is hidden. Text
+          // fields keep '' because an empty description is a real state.
+          Visible: product.visible ?? null,
+          Locked: product.is_locked ?? null,
+          CreatedAt: product.created_at ?? null,
+          UpdatedAt: product.updated_at ?? null,
+          VariantCount: variants.length,
+          EnabledCount: enabled.length,
+          // Only enabled variants: a blueprint can carry hundreds, and emitting
+          // them all pushes the response past the MCP output limit.
+          Variants: enabled.map((v: any) => ({
+            id: v.id,
+            title: v.title,
+            price: v.price,
+            cost: v.cost
+          })),
+          PrintAreas: (product.print_areas ?? []).map((area: any) => ({
+            variantCount: (area.variant_ids ?? []).length,
+            // Enabled ids only, and named: a group can span hundreds of
+            // variants, but without knowing *which* ones an artwork override
+            // cannot be traced back to a colorway.
+            enabledVariants: (area.variant_ids ?? [])
+              .filter((id: number) => enabledById.has(id))
+              .map((id: number) => ({ id, title: enabledById.get(id)?.title })),
+            placeholders: (area.placeholders ?? []).map((ph: any) => ({
+              position: ph.position,
+              images: (ph.images ?? []).map((img: any) => ({
+                id: img.id,
+                name: img.name,
+                x: img.x,
+                y: img.y,
+                scale: img.scale,
+                angle: img.angle
+              }))
+            }))
+          })),
+          SalesChannel: product.external ?? null
         }
       )
     };
@@ -123,22 +213,7 @@ export async function getProduct(
  */
 export async function createProduct(
   printifyClient: PrintifyAPI,
-  productData: {
-    title: string;
-    description: string;
-    blueprintId: number;
-    printProviderId: number;
-    variants: Array<{
-      variantId: number;
-      price: number;
-      isEnabled?: boolean;
-    }>;
-    printAreas?: Record<string, {
-      position: string;
-      imageId: string;
-    }>;
-    tags?: string[];
-  }
+  productData: CreateProductData
 ) {
   try {
     // Validate shop is selected
@@ -197,20 +272,7 @@ export async function createProduct(
 export async function updateProduct(
   printifyClient: PrintifyAPI,
   productId: string,
-  updateData: {
-    title?: string;
-    description?: string;
-    variants?: Array<{
-      variantId: number;
-      price: number;
-      isEnabled?: boolean;
-    }>;
-    printAreas?: Record<string, {
-      position: string;
-      imageId: string;
-    }>;
-    tags?: string[];
-  }
+  updateData: UpdateProductData
 ) {
   try {
     // Validate shop is selected

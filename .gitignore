@@ -25,3 +25,5 @@ temp/
 # test coverage output
 coverage/
 .tmp-test/
+PLAN.md
+.review-pr-ignored-*
