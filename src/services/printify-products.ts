@@ -14,7 +14,11 @@ interface ProductVariantInput {
 }
 
 /**
- * Print areas keyed by the placement name Printify expects.
+ * Print areas, one entry per placement.
+ *
+ * The key is the caller's own label for the entry and never reaches Printify:
+ * buildPrintAreaEntry reads Object.values() and takes the placement from each
+ * value's `position`.
  */
 type ProductPrintAreas = Record<string, {
   position: string;

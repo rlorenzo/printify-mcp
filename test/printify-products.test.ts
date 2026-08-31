@@ -174,6 +174,19 @@ describe('getProduct', () => {
     expect(text).toContain('"scale":0.9');
   });
 
+  // The whole point of this change is that projected fields stop silently
+  // disappearing, so the sales-channel link gets its own assertion.
+  it('surfaces the sales channel link', async () => {
+    const result = await getProduct(productClient(), 'prod1');
+    const text = result.response.content[0].text;
+    expect(text).toContain('**SalesChannel**: {"id":"ext1","handle":"test-product"}');
+  });
+
+  it('reports an unlinked product as null', async () => {
+    const result = await getProduct(productClient({ id: 'p', title: 'T' }), 'p');
+    expect(result.response.content[0].text).toContain('**SalesChannel**: null');
+  });
+
   it('keeps the original ProductId, Title and Shop fields', async () => {
     const result = await getProduct(productClient(), 'prod1');
     const text = result.response.content[0].text;
