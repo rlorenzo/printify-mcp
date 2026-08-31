@@ -385,7 +385,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
     "get_blueprints",
     {
       page: z.number().optional().default(1).describe("Page number"),
-      limit: z.number().optional().default(10).describe("Number of blueprints per page")
+      limit: z.number().optional().default(10).describe("Number of blueprints per page (max 100)")
     },
     async ({ page, limit }): Promise<{ content: any[], isError?: boolean }> => {
       // Import the printify blueprints service
@@ -443,16 +443,18 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
     "get_variants",
     {
       blueprintId: z.string().describe("Blueprint ID"),
-      printProviderId: z.string().describe("Print provider ID")
+      printProviderId: z.string().describe("Print provider ID"),
+      page: z.number().optional().default(1).describe("Page number"),
+      limit: z.number().optional().default(50).describe("Number of variants per page (max 100)")
     },
-    async ({ blueprintId, printProviderId }): Promise<{ content: any[], isError?: boolean }> => {
+    async ({ blueprintId, printProviderId, page, limit }): Promise<{ content: any[], isError?: boolean }> => {
       // Import the printify blueprints service
       const { getVariants } = await import('./services/printify-blueprints.js');
 
       if (!printifyReady(ctx)) return printifyNotReady();
 
       // Call the service
-      const result = await getVariants(ctx.printifyClient, blueprintId, printProviderId);
+      const result = await getVariants(ctx.printifyClient, blueprintId, printProviderId, { page, limit });
 
       return unwrap(result);
     }

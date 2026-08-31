@@ -19,7 +19,7 @@
       }
     },
     "src/services/printify-uploader.ts": {
-      "complexity_critical": {
+      "complexity_high": {
         "count": 1
       }
     },
@@ -35,6 +35,6 @@
   "runtime_coverage_findings": [],
   "target_keys": [
     "src/printify-api.ts:complexity",
-    "src/services/printify-uploader.ts:complexity"
+    "test/helpers/harness.ts:high impact"
   ]
 }
