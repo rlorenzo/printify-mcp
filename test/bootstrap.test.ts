@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { initializeClients } from '../src/bootstrap.js';
 import { PrintifyAPI } from '../src/printify-api.js';
 import { ReplicateClient } from '../src/replicate-client.js';
+import { DefaultsManager } from '../src/model-manager.js';
 import type { PrintifyContext } from '../src/tools.js';
 
 const ctx = (): PrintifyContext => ({ printifyClient: null, replicateClient: null });
@@ -20,6 +21,27 @@ describe('initializeClients', () => {
     const c = await initializeClients(ctx(), { REPLICATE_API_TOKEN: 't' });
     expect(c.printifyClient).toBeNull();
     expect(c.replicateClient).toBeInstanceOf(ReplicateClient);
+  });
+
+  // Regression: the defaults lived inside the Replicate client, so with no
+  // token there was nothing to read and get_defaults failed outright.
+  it('always provides a defaults manager, token or not', async () => {
+    expect((await initializeClients(ctx(), {})).defaultsManager).toBeInstanceOf(DefaultsManager);
+    expect((await initializeClients(ctx(), { REPLICATE_API_TOKEN: 't' })).defaultsManager)
+      .toBeInstanceOf(DefaultsManager);
+  });
+
+  it('hands the Replicate client the context\'s defaults manager', async () => {
+    const c = await initializeClients(ctx(), { REPLICATE_API_TOKEN: 't' });
+    expect(c.replicateClient!.getDefaultsManager()).toBe(c.defaultsManager);
+  });
+
+  it('keeps a defaults manager the caller already supplied', async () => {
+    const defaultsManager = new DefaultsManager();
+    defaultsManager.setDefault('outputFormat', 'webp');
+    const c = await initializeClients({ ...ctx(), defaultsManager }, { REPLICATE_API_TOKEN: 't' });
+    expect(c.defaultsManager).toBe(defaultsManager);
+    expect(c.replicateClient!.getDefault('outputFormat')).toBe('webp');
   });
 
   it('creates and initializes the Printify client', async () => {

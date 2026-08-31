@@ -10,6 +10,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { PrintifyAPI } from "./printify-api.js";
 import { ReplicateClient } from "./replicate-client.js";
+import { DefaultsManager } from "./model-manager.js";
 import { mergeGenerationOptions } from "./generation-options.js";
 import { stageOnImgbb, requiresImgbb, hasImgbbKey } from "./services/imgbb.js";
 import { saveDebugCopy } from "./services/image-format.js";
@@ -24,6 +25,16 @@ import { saveDebugCopy } from "./services/image-format.js";
 export interface PrintifyContext {
   printifyClient: PrintifyAPI | null;
   replicateClient: ReplicateClient | null;
+  /**
+   * Image-generation defaults.
+   *
+   * Owned by the context rather than by the Replicate client because reading
+   * and writing them needs no API token: `get_defaults` and `set_default` have
+   * to work on a server with no REPLICATE_API_TOKEN, where `replicateClient` is
+   * null. Optional so an existing hand-built context stays valid: the tools
+   * create one on first use (see `defaultsFor`).
+   */
+  defaultsManager?: DefaultsManager;
 }
 
 type ToolResult = { content: any[]; isError?: boolean };
@@ -52,6 +63,32 @@ function printifyNotReady(): ToolResult {
     }],
     isError: true
   };
+}
+
+/**
+ * The error result for the tools that genuinely need a Replicate token. Only
+ * the two image-generation tools do; the defaults tools read and write local
+ * state, so they must not be gated on it.
+ */
+function replicateNotReady(): ToolResult {
+  return {
+    content: [{
+      type: "text",
+      text: "Replicate API client is not initialized, so image generation is unavailable. Set the REPLICATE_API_TOKEN environment variable, or pass replicateApiToken to createPrintifyMcpServer()."
+    }],
+    isError: true
+  };
+}
+
+/**
+ * The context's defaults, created on first use.
+ *
+ * Prefers the Replicate client's own manager when the context was built without
+ * one, so a default set through these tools still reaches image generation.
+ */
+function defaultsFor(ctx: PrintifyContext): DefaultsManager {
+  ctx.defaultsManager ??= ctx.replicateClient?.getDefaultsManager?.() ?? new DefaultsManager();
+  return ctx.defaultsManager;
 }
 
 /**
@@ -457,19 +494,10 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
     {},
     async () => {
       try {
-        if (!ctx.replicateClient) {
-          return {
-            content: [{
-              type: "text",
-              text: "Replicate API client is not initialized. The REPLICATE_API_TOKEN environment variable may not be set."
-            }],
-            isError: true
-          };
-        }
-
-        const models = ctx.replicateClient.getAvailableModels();
-        const currentDefault = ctx.replicateClient.getDefault('model');
-        const allDefaults = ctx.replicateClient.getAllDefaults();
+        const defaults = defaultsFor(ctx);
+        const models = defaults.getAvailableModels();
+        const currentDefault = defaults.getDefault('model');
+        const allDefaults = defaults.getAllDefaults();
 
         // Format the response in a user-friendly way
         const modelInfo = models.map(model => {
@@ -496,6 +524,9 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
           content: [{
             type: "text",
             text: `# Current Default Settings\n\n` +
+                  (ctx.replicateClient ? `` :
+                    `> No REPLICATE_API_TOKEN is configured, so these defaults can be read and ` +
+                    `changed but image generation is unavailable.\n\n`) +
                   `## Selected Model\n\n${modelInfo}\n\n` +
                   `## All Default Parameters\n\n` +
                   `| Option | Value |\n` +
@@ -533,28 +564,20 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
     },
     async ({ option, value }) => {
       try {
-        if (!ctx.replicateClient) {
-          return {
-            content: [{
-              type: "text",
-              text: "Replicate API client is not initialized. The REPLICATE_API_TOKEN environment variable may not be set."
-            }],
-            isError: true
-          };
-        }
+        const defaults = defaultsFor(ctx);
 
         // Set the default value
-        ctx.replicateClient.setDefault(option, value);
+        defaults.setDefault(option, value);
 
         // Get all current defaults for the response
-        const allDefaults = ctx.replicateClient.getAllDefaults();
+        const allDefaults = defaults.getAllDefaults();
 
         // Format the response based on the option type
         let detailedResponse = "";
 
         if (option === 'model') {
           // For model option, provide more detailed information
-          const models = ctx.replicateClient.getAvailableModels();
+          const models = defaults.getAvailableModels();
           const selectedModel = models.find(model => model.id === value);
 
           if (selectedModel) {
@@ -722,21 +745,13 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       const { formatSuccessResponse } = await import('./utils/error-handler.js');
 
       // Check if clients are initialized
-      if (!ctx.replicateClient) {
-        return {
-          content: [{
-            type: "text",
-            text: "Replicate API client is not initialized. The REPLICATE_API_TOKEN environment variable may not be set."
-          }],
-          isError: true
-        };
-      }
+      if (!ctx.replicateClient) return replicateNotReady();
 
       if (!printifyReady(ctx)) return printifyNotReady();
 
       // Check if we're using the Ultra model which requires ImgBB
       // Determine which model to use (user-specified or default)
-      const modelToUse = model || ctx.replicateClient.getDefaultModel();
+      const modelToUse = model || defaultsFor(ctx).getDefault('model');
 
       // Fail before generating: an Ultra image that cannot be staged is wasted
       // spend.
@@ -768,7 +783,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       console.error(`Starting generate_and_upload_image with prompt: ${prompt}`);
 
       // Get default parameters first
-      const defaults = ctx.replicateClient.getAllDefaults();
+      const defaults = defaultsFor(ctx).getAllDefaults();
 
       // STEP 1: Generate the image with Replicate and process with Sharp
       // Start with defaults, then override with parameters from the tool call
@@ -939,29 +954,21 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       const path = await import('path');
 
       // Check if Replicate client is initialized
-      if (!ctx.replicateClient) {
-        return {
-          content: [{
-            type: "text",
-            text: "Replicate API client is not initialized. The REPLICATE_API_TOKEN environment variable may not be set."
-          }],
-          isError: true
-        };
-      }
+      if (!ctx.replicateClient) return replicateNotReady();
 
       // Extract filename from the output path
       const fileName = path.basename(outputPath);
 
       // Check if we're using the Ultra model which requires ImgBB
       // Determine which model to use (user-specified or default)
-      const modelToUse = model || ctx.replicateClient.getDefaultModel();
+      const modelToUse = model || defaultsFor(ctx).getDefault('model');
 
       console.error(`Starting generate_image with prompt: ${prompt}`);
       console.error(`Using model: ${modelToUse}`);
       console.error(`Output path: ${outputPath}`);
 
       // Get default parameters first
-      const defaults = ctx.replicateClient.getAllDefaults();
+      const defaults = defaultsFor(ctx).getAllDefaults();
 
       // Generate the image with Replicate and process with Sharp
       // Start with defaults, then override with parameters from the tool call
