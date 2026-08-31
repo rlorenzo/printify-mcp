@@ -2,12 +2,12 @@
  * Library entrypoint.
  *
  * This module is the package's `main`/`exports` target. It deliberately does not
- * import `stdio-guard.js` or connect a transport: importing the library must not
- * patch the consumer's console or take over their stdio. The executable
- * (`index.ts`) owns those side effects.
+ * import `stdio-guard.js`, connect a transport, or load a `.env`: importing the
+ * library must not patch the consumer's console, take over their stdio, or
+ * rewrite their environment. The executable (`index.ts`) owns those side
+ * effects.
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import dotenv from "dotenv";
 import { PrintifyAPI } from "./printify-api.js";
 import { ReplicateClient } from "./replicate-client.js";
 import { DefaultsManager } from "./model-manager.js";
@@ -39,11 +39,6 @@ export function createPrintifyMcpServer(options?: {
   serverName?: string;
   serverVersion?: string;
 }) {
-  // Load environment variables if not explicitly provided
-  if (!options?.printifyApiKey || !options?.replicateApiToken) {
-    dotenv.config();
-  }
-
   const server = new McpServer({
     name: options?.serverName || "Printify-MCP",
     version: options?.serverVersion || "1.0.0"

@@ -212,7 +212,8 @@ This will start the server in development mode with automatic reloading when fil
 ### Using as a library
 
 Importing the package gives you the server factory and the underlying clients. It
-does not start a server or touch your stdio, so you choose the transport:
+does not start a server, touch your stdio, or load a `.env`, so you choose the
+transport and how your configuration is loaded:
 
 ```js
 import { createPrintifyMcpServer } from '@tsavo/printify-mcp';
@@ -225,6 +226,11 @@ const { server, initialize } = createPrintifyMcpServer({
 await initialize();                 // fetch shops, select the default
 await server.connect(new StdioServerTransport());
 ```
+
+Options fall back to `PRINTIFY_API_KEY`, `PRINTIFY_SHOP_ID`, and
+`REPLICATE_API_TOKEN` when omitted, but the library reads only what is already
+in `process.env`. Call `dotenv.config()` yourself first if you keep those in a
+`.env` file; the `printify-mcp` executable does this for you.
 
 `createPrintifyMcpServer()` returns the `server` with all tools and prompts
 registered, the `printifyClient` and `replicateClient`, and an `initialize()`
