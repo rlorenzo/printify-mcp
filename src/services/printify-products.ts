@@ -124,6 +124,7 @@ export async function getProduct(
 
     const variants: any[] = product.variants ?? [];
     const enabled = variants.filter((v: any) => v.is_enabled);
+    const enabledById = new Map<number, any>(enabled.map((v: any) => [v.id, v]));
 
     return {
       success: true,
@@ -155,6 +156,12 @@ export async function getProduct(
           })),
           PrintAreas: (product.print_areas ?? []).map((area: any) => ({
             variantCount: (area.variant_ids ?? []).length,
+            // Enabled ids only, and named: a group can span hundreds of
+            // variants, but without knowing *which* ones an artwork override
+            // cannot be traced back to a colorway.
+            enabledVariants: (area.variant_ids ?? [])
+              .filter((id: number) => enabledById.has(id))
+              .map((id: number) => ({ id, title: enabledById.get(id)?.title })),
             placeholders: (area.placeholders ?? []).map((ph: any) => ({
               position: ph.position,
               images: (ph.images ?? []).map((img: any) => ({

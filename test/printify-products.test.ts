@@ -117,6 +117,29 @@ describe('getProduct', () => {
     expect(text).not.toContain('103');
   });
 
+  // A print area can override the artwork for one colorway. Reporting only a
+  // count leaves that override untraceable to the colors it applies to.
+  it('names the enabled variants each print area covers', async () => {
+    const result = await getProduct(productClient(), 'prod1');
+    const text = result.response.content[0].text;
+    expect(text).toContain('"title":"Variant A"');
+    expect(text).toContain('"title":"Variant B"');
+  });
+
+  it('omits disabled variants from a print area listing', async () => {
+    const product = fakeProduct({
+      print_areas: [{
+        variant_ids: [101, 103],
+        placeholders: [{ position: 'front', images: [] }]
+      }]
+    });
+    const result = await getProduct(productClient(product), 'prod1');
+    const text = result.response.content[0].text;
+    expect(text).toContain('**VariantCount**: "3"');
+    expect(text).toContain('"id":101');
+    expect(text).not.toContain('"id":103');
+  });
+
   it('surfaces print area image ids and placement', async () => {
     const result = await getProduct(productClient(), 'prod1');
     const text = result.response.content[0].text;
