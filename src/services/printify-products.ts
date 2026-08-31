@@ -155,8 +155,7 @@ export async function getProduct(
             id: v.id,
             title: v.title,
             price: v.price,
-            cost: v.cost,
-            is_enabled: v.is_enabled
+            cost: v.cost
           })),
           PrintAreas: (product.print_areas ?? []).map((area: any) => ({
             variantCount: (area.variant_ids ?? []).length,

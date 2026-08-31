@@ -101,12 +101,21 @@ describe('getProduct', () => {
     expect(text).toContain('**PrintProviderId**: "2"');
   });
 
+  // Assert on the projected keys, not bare digits: '101' also matches a price
+  // or a count, so a loose assertion would survive the projection breaking.
   it('lists enabled variants with their ids, prices and costs', async () => {
     const result = await getProduct(productClient(), 'prod1');
     const text = result.response.content[0].text;
-    expect(text).toContain('101');
-    expect(text).toContain('1000');
-    expect(text).toContain('400');
+    expect(text).toContain('"id":101');
+    expect(text).toContain('"price":1000');
+    expect(text).toContain('"cost":400');
+  });
+
+  // Every entry is enabled by construction, so the flag would carry no
+  // information in a response already fighting the output limit.
+  it('omits the redundant is_enabled flag from each variant', async () => {
+    const result = await getProduct(productClient(), 'prod1');
+    expect(result.response.content[0].text).not.toContain('is_enabled');
   });
 
   it('excludes disabled variants but still counts them', async () => {
@@ -114,7 +123,8 @@ describe('getProduct', () => {
     const text = result.response.content[0].text;
     expect(text).toContain('**VariantCount**: "3"');
     expect(text).toContain('**EnabledCount**: "2"');
-    expect(text).not.toContain('103');
+    expect(text).not.toContain('"id":103');
+    expect(text).not.toContain('Variant C');
   });
 
   // A print area can override the artwork for one colorway. Reporting only a
