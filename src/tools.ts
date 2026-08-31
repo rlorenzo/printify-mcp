@@ -31,8 +31,8 @@ export interface PrintifyContext {
    * Owned by the context rather than by the Replicate client because reading
    * and writing them needs no API token: `get_defaults` and `set_default` have
    * to work on a server with no REPLICATE_API_TOKEN, where `replicateClient` is
-   * null. Optional so an existing hand-built context stays valid;
-   * `registerTools` fills it in.
+   * null. Optional so an existing hand-built context stays valid: the tools
+   * create one on first use (see `defaultsFor`).
    */
   defaultsManager?: DefaultsManager;
 }
