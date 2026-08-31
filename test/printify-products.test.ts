@@ -134,9 +134,10 @@ describe('getProduct', () => {
   });
 
   // Printify omits keys on some products, and formatFields renders a missing
-  // value as the literal string "undefined".
+  // value as the literal string "undefined". The fixture carries only an id so
+  // that every field the response emits, title included, has to be guarded.
   it('emits no "undefined" for a sparse record', async () => {
-    const sparse = { id: 'prod2', title: 'Bare' };
+    const sparse = { id: 'prod2' };
     const result = await getProduct(productClient(sparse), 'prod2');
     expect(result.response.content[0].text).not.toContain('undefined');
   });

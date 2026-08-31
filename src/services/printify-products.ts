@@ -132,7 +132,7 @@ export async function getProduct(
         'Product Retrieved Successfully',
         {
           ProductId: productId,
-          Title: product.title,
+          Title: product.title ?? '',
           Shop: currentShop,
           Description: product.description ?? '',
           Tags: product.tags ?? [],
