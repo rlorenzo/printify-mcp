@@ -1,6 +1,0 @@
-# fallow writes analysis caches here; only the regression baselines are tracked.
-# This nested file takes precedence over the repo-root .gitignore, so the
-# baselines must be re-included here or newly generated ones are never staged.
-*
-!.gitignore
-!*.baseline.json
