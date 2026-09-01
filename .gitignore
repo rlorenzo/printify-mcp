@@ -17,13 +17,18 @@ test-*.js
 debug/
 temp/
 
-# fallow: ignore analysis caches, but track the committed regression baselines
+# fallow: ignore analysis caches, but track the committed regression baselines.
+# fallow rewrites .fallow/.gitignore to a bare '*' on most runs, and a nested
+# .gitignore beats this file, so that one is deliberately left untracked and
+# ignored here. What keeps the baselines staged is the 'git add -f' at the end
+# of 'analyze:baseline', not any ignore rule.
 .fallow/cache/
 .fallow/*.json
+.fallow/*.bin
+.fallow/.gitignore
 !.fallow/*.baseline.json
 
 # test coverage output
 coverage/
 .tmp-test/
-PLAN.md
 .review-pr-ignored-*
