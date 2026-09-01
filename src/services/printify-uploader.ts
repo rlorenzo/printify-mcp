@@ -3,7 +3,7 @@
  */
 // No need for fs and path imports
 import { PrintifyAPI } from '../printify-api.js';
-import { formatErrorResponse, formatSuccessResponse } from '../utils/error-handler.js';
+import { describeError, formatErrorResponse, formatSuccessResponse } from '../utils/error-handler.js';
 import { getFileInfo, validateFilePath } from '../utils/file-utils.js';
 
 /**
@@ -260,7 +260,7 @@ export async function uploadImageToPrintify(
       )
     };
   } catch (error: any) {
-    console.error('Error uploading image to Printify:', error);
+    console.error('Error uploading image to Printify:', describeError(error));
 
     // Determine source type for better error messages
     const sourceType = determineImageSourceType(source);

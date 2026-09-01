@@ -2,7 +2,7 @@
  * Printify shops service for Printify MCP
  */
 import { PrintifyAPI } from '../printify-api.js';
-import { formatErrorResponse } from '../utils/error-handler.js';
+import { describeError, formatErrorResponse } from '../utils/error-handler.js';
 
 /**
  * Get Printify status
@@ -33,7 +33,7 @@ export async function getPrintifyStatus(printifyClient: PrintifyAPI) {
       }
     };
   } catch (error: any) {
-    console.error('Error getting Printify status:', error);
+    console.error('Error getting Printify status:', describeError(error));
     
     return {
       success: false,
@@ -96,7 +96,7 @@ export async function listPrintifyShops(printifyClient: PrintifyAPI) {
       }
     };
   } catch (error: any) {
-    console.error('Error listing Printify shops:', error);
+    console.error('Error listing Printify shops:', describeError(error));
     
     return {
       success: false,
@@ -146,7 +146,7 @@ export async function switchPrintifyShop(printifyClient: PrintifyAPI, shopId: st
       }
     };
   } catch (error: any) {
-    console.error('Error switching Printify shop:', error);
+    console.error('Error switching Printify shop:', describeError(error));
     
     return {
       success: false,

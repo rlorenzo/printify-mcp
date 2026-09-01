@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import Printify from 'printify-sdk-js';
 import sharp from 'sharp';
+import { describeError } from './utils/error-handler.js';
 
 // Shop interface
 export interface PrintifyShop {
@@ -50,6 +51,15 @@ function formatVariants(variants: any[]): any[] {
   }));
 }
 
+/**
+ * Shops as a log line: ids and titles only. The full records carry account
+ * details that nothing downstream of a log message needs.
+ */
+function summarizeShops(shops: any): string {
+  if (!Array.isArray(shops) || shops.length === 0) return 'none';
+  return shops.map((shop: any) => `${shop?.id} (${shop?.title})`).join(', ');
+}
+
 export class PrintifyAPI {
   private client: any;
   private apiToken: string;
@@ -60,6 +70,12 @@ export class PrintifyAPI {
     // Store the API token
     this.apiToken = apiToken;
 
+    // Report whether a token was supplied, never any part of it. Even a prefix
+    // is secret-derived, and stderr here is the MCP client's log file. Logged
+    // before the SDK is constructed, because the SDK throws a bare
+    // "accessToken is required" on an empty one and this line says why.
+    console.error(`Printify API client initializing (API token ${apiToken ? 'present' : 'MISSING'})`);
+
     // Initialize the Printify SDK client
     this.client = new Printify({
       accessToken: apiToken,
@@ -67,8 +83,6 @@ export class PrintifyAPI {
       enableLogging: false,
       timeout: 60000
     });
-
-    console.error('Printify API client initialized with token:', apiToken.substring(0, 5) + '...');
 
     // Set the shop ID if provided
     if (shopId) {
@@ -88,11 +102,10 @@ export class PrintifyAPI {
       try {
         console.error('Fetching shops from Printify API...');
         const shops = await this.client.shops.list();
-        console.error('Shops response:', shops);
 
         if (shops && Array.isArray(shops)) {
           this.shops = shops;
-          console.error(`Found ${this.shops.length} shops:`, this.shops);
+          console.error(`Found ${this.shops.length} shops: ${summarizeShops(this.shops)}`);
 
           // If shops are available, set the first one as default if not already set
           if (this.shops.length > 0 && !this.shopId) {
@@ -113,7 +126,7 @@ export class PrintifyAPI {
 
         return this.shops;
       } catch (sdkError) {
-        console.error('Error fetching shops from Printify API:', sdkError);
+        console.error('Error fetching shops from Printify API:', describeError(sdkError));
 
         // If we already have a shop ID, we can continue with that
         if (this.shopId) {
@@ -126,7 +139,7 @@ export class PrintifyAPI {
         throw sdkError;
       }
     } catch (error) {
-      console.error('Error initializing Printify API:', error);
+      console.error('Error initializing Printify API:', describeError(error));
       throw error;
     }
   }
@@ -171,7 +184,7 @@ export class PrintifyAPI {
 
       try {
         const shops = await this.client.shops.list();
-        console.error('Shops response:', shops);
+        console.error(`Fetched ${Array.isArray(shops) ? shops.length : 0} shops: ${summarizeShops(shops)}`);
 
         if (shops && Array.isArray(shops)) {
           this.shops = shops; // keep the internal cache fresh for getCurrentShop()
@@ -181,11 +194,11 @@ export class PrintifyAPI {
           return [];
         }
       } catch (sdkError) {
-        console.error('Error fetching shops from Printify API:', sdkError);
+        console.error('Error fetching shops from Printify API:', describeError(sdkError));
         throw sdkError;
       }
     } catch (error) {
-      console.error('Error fetching shops:', error);
+      console.error('Error fetching shops:', describeError(error));
       throw error;
     }
   }
@@ -203,11 +216,11 @@ export class PrintifyAPI {
         const response = await this.client.products.list({ page, limit });
         return response;
       } catch (sdkError) {
-        console.error('Error fetching products from Printify API:', sdkError);
+        console.error('Error fetching products from Printify API:', describeError(sdkError));
         throw sdkError;
       }
     } catch (error) {
-      console.error('Error fetching products:', error);
+      console.error('Error fetching products:', describeError(error));
       throw error;
     }
   }
@@ -222,7 +235,7 @@ export class PrintifyAPI {
       // Use the products.getOne method with the product ID
       return await this.client.products.getOne(productId);
     } catch (error) {
-      console.error(`Error fetching product ${productId}:`, error);
+      console.error(`Error fetching product ${productId}:`, describeError(error));
       throw error;
     }
   }
@@ -274,22 +287,18 @@ export class PrintifyAPI {
         // Add the formatted data to the error object for better debugging
         error.formattedData = formattedData;
 
-        // Log the full error response
-        console.error('Full error response:', error);
+        // describeError already reports the status and the response body.
+        console.error('Full error response:', describeError(error));
 
-        // If there's a response object, extract and log the full response data
         if (error.response) {
-          console.error('Response status:', error.response.status);
-          console.error('Response data:', JSON.stringify(error.response.data, null, 2));
-
-          // Add the full response data to the error object
+          // Kept for callers that inspect the thrown error, not for the log.
           error.fullResponseData = error.response.data;
         }
 
         throw error;
       }
     } catch (error) {
-      console.error('Error creating product:', error);
+      console.error('Error creating product:', describeError(error));
       throw this.enhanceError(error, productData);
     }
   }
@@ -327,7 +336,7 @@ export class PrintifyAPI {
                 .filter((v: any) => v.is_enabled)
                 .map((v: any) => v.id);
             } catch (error) {
-              console.error(`Error fetching current product ${productId}:`, error);
+              console.error(`Error fetching current product ${productId}:`, describeError(error));
               // Continue with empty variant IDs
             }
           }
@@ -348,7 +357,7 @@ export class PrintifyAPI {
         return await this.client.products.updateOne(productId, productData);
       }
     } catch (error) {
-      console.error(`Error updating product ${productId}:`, error);
+      console.error(`Error updating product ${productId}:`, describeError(error));
       throw this.enhanceError(error, productData);
     }
   }
@@ -363,7 +372,7 @@ export class PrintifyAPI {
       // Use the products.deleteOne method with the product ID
       return await this.client.products.deleteOne(productId);
     } catch (error) {
-      console.error(`Error deleting product ${productId}:`, error);
+      console.error(`Error deleting product ${productId}:`, describeError(error));
       throw error;
     }
   }
@@ -378,7 +387,7 @@ export class PrintifyAPI {
       // Use the products.publishOne method with the product ID and publish data
       return await this.client.products.publishOne(productId, publishData);
     } catch (error) {
-      console.error(`Error publishing product ${productId}:`, error);
+      console.error(`Error publishing product ${productId}:`, describeError(error));
       throw this.enhanceError(error, publishData);
     }
   }
@@ -389,7 +398,7 @@ export class PrintifyAPI {
       // Use the catalog.listBlueprints method
       return await this.client.catalog.listBlueprints();
     } catch (error) {
-      console.error('Error fetching blueprints:', error);
+      console.error('Error fetching blueprints:', describeError(error));
       throw error;
     }
   }
@@ -400,7 +409,7 @@ export class PrintifyAPI {
       // Use the catalog.getBlueprint method
       return await this.client.catalog.getBlueprint(blueprintId);
     } catch (error) {
-      console.error(`Error fetching blueprint ${blueprintId}:`, error);
+      console.error(`Error fetching blueprint ${blueprintId}:`, describeError(error));
       throw error;
     }
   }
@@ -411,7 +420,7 @@ export class PrintifyAPI {
       // Use the catalog.getBlueprintProviders method
       return await this.client.catalog.getBlueprintProviders(blueprintId);
     } catch (error) {
-      console.error(`Error fetching print providers for blueprint ${blueprintId}:`, error);
+      console.error(`Error fetching print providers for blueprint ${blueprintId}:`, describeError(error));
       throw error;
     }
   }
@@ -422,7 +431,7 @@ export class PrintifyAPI {
       // Use the catalog.getBlueprintVariants method
       return await this.client.catalog.getBlueprintVariants(blueprintId, printProviderId);
     } catch (error) {
-      console.error(`Error fetching variants for blueprint ${blueprintId} and print provider ${printProviderId}:`, error);
+      console.error(`Error fetching variants for blueprint ${blueprintId} and print provider ${printProviderId}:`, describeError(error));
       throw error;
     }
   }
@@ -440,13 +449,10 @@ export class PrintifyAPI {
         error.validationErrors = error.response.data.errors;
       }
 
-      // Log the complete error response for debugging
-      console.error('Complete error response:', JSON.stringify({
-        status: error.response.status,
-        statusText: error.response.statusText,
-        data: error.response.data,
-        headers: error.response.headers
-      }, null, 2));
+      // Response headers are deliberately not logged: they carry no diagnostic
+      // value that the status does not, and dumping header maps is how request
+      // headers -- which hold the bearer token -- end up in logs by mistake.
+      console.error('Complete error response:', describeError(error));
     }
 
     if (requestData) {
@@ -491,7 +497,7 @@ export class PrintifyAPI {
           // Check if file exists
           if (!fs.existsSync(filePath)) {
             const error = new Error(`File not found: ${filePath}`);
-            console.error('File not found error:', error);
+            console.error('File not found error:', describeError(error));
             console.error('Current working directory:', process.cwd());
             console.error('File path type:', typeof filePath);
             console.error('Absolute path check:', path.isAbsolute(filePath) ? 'Absolute' : 'Relative');
@@ -505,7 +511,7 @@ export class PrintifyAPI {
                 console.error('Parent directory does not exist:', dir);
               }
             } catch (dirError) {
-              console.error('Error checking directory:', dirError);
+              console.error('Error checking directory:', describeError(dirError));
             }
 
             throw error;
@@ -560,15 +566,11 @@ export class PrintifyAPI {
             console.error('Upload successful, result:', result);
             return result;
           } catch (uploadError: any) {
-            console.error('Error during Printify upload:', uploadError);
-            if (uploadError.response) {
-              console.error('Response status:', uploadError.response.status);
-              console.error('Response data:', JSON.stringify(uploadError.response.data, null, 2));
-            }
+            console.error('Error during Printify upload:', describeError(uploadError));
             throw uploadError;
           }
         } catch (error: any) {
-          console.error('Error reading file:', error);
+          console.error('Error reading file:', describeError(error));
           const errorMessage = error.message || 'Unknown error';
 
           // Create a detailed error message with troubleshooting information
@@ -594,7 +596,7 @@ export class PrintifyAPI {
         return await this.client.uploads.uploadImage({ file_name: fileName, contents: source });
       }
     } catch (error: any) {
-      console.error('Error uploading image:', error);
+      console.error('Error uploading image:', describeError(error));
 
       // Add detailed debugging information
       const debugInfo: any = {
@@ -608,12 +610,9 @@ export class PrintifyAPI {
 
       console.error('Detailed upload error information:', JSON.stringify(debugInfo, null, 2));
 
-      // If there's a response object, extract and log the full response data
       if (error.response) {
-        console.error('Response status:', error.response.status);
-        console.error('Response data:', JSON.stringify(error.response.data, null, 2));
-
-        // Add the full response data to the debug info
+        // Carried on the thrown error for callers; the log line above and
+        // describeError have already reported the status and body.
         debugInfo.responseStatus = error.response.status;
         debugInfo.responseData = error.response.data;
       }

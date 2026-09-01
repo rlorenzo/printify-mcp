@@ -8,6 +8,7 @@ import { PrintifyAPI } from './printify-api.js';
 import { ReplicateClient } from './replicate-client.js';
 import { DefaultsManager } from './model-manager.js';
 import type { PrintifyContext } from './tools.js';
+import { describeError } from './utils/error-handler.js';
 
 /**
  * Populate `ctx` from the environment, logging what was configured.
@@ -45,7 +46,7 @@ export async function initializeClients(
       }
     }
   } catch (error) {
-    console.error('Error initializing the Printify API client:', error);
+    console.error('Error initializing the Printify API client:', describeError(error));
   }
 
   try {
@@ -61,7 +62,7 @@ export async function initializeClients(
       console.error('Replicate API client initialized successfully.');
     }
   } catch (error) {
-    console.error('Error initializing the Replicate API client:', error);
+    console.error('Error initializing the Replicate API client:', describeError(error));
   }
 
   return ctx;

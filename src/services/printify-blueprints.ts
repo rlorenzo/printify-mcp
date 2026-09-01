@@ -2,7 +2,7 @@
  * Printify blueprints service for Printify MCP
  */
 import { PrintifyAPI } from '../printify-api.js';
-import { formatErrorResponse, formatSuccessResponse } from '../utils/error-handler.js';
+import { describeError, formatErrorResponse, formatSuccessResponse } from '../utils/error-handler.js';
 
 /**
  * The most items a caller may take in one page.
@@ -115,7 +115,7 @@ export async function getBlueprints(
       )
     };
   } catch (error: any) {
-    console.error('Error getting blueprints:', error);
+    console.error('Error getting blueprints:', describeError(error));
     
     return {
       success: false,
@@ -163,7 +163,7 @@ export async function getBlueprint(
       }
     };
   } catch (error: any) {
-    console.error('Error getting blueprint:', error);
+    console.error('Error getting blueprint:', describeError(error));
     
     return {
       success: false,
@@ -211,7 +211,7 @@ export async function getPrintProviders(
       }
     };
   } catch (error: any) {
-    console.error('Error getting print providers:', error);
+    console.error('Error getting print providers:', describeError(error));
     
     return {
       success: false,
@@ -290,7 +290,7 @@ export async function getVariants(
       )
     };
   } catch (error: any) {
-    console.error('Error getting variants:', error);
+    console.error('Error getting variants:', describeError(error));
     
     return {
       success: false,

@@ -21,6 +21,77 @@ function formatFields(fields: Record<string, any>): string {
 }
 
 /**
+ * Cap on a serialized response body in a log line. A failing request should not
+ * be able to flood the operator's log the way the catalog tools once flooded a
+ * tool response.
+ */
+const MAX_LOGGED_BODY = 2000;
+
+function safeJson(value: any): string {
+  try {
+    const text = JSON.stringify(value);
+    if (text === undefined) return String(value);
+    return text.length > MAX_LOGGED_BODY
+      ? `${text.slice(0, MAX_LOGGED_BODY)}... (${text.length} chars total)`
+      : text;
+  } catch {
+    return '[unserializable]';
+  }
+}
+
+/**
+ * Render an error as a single safe string for the operator log.
+ *
+ * Never hand an error object straight to `console.error`. An axios error
+ * carries `config` as an own enumerable property, so Node's inspector prints
+ * `headers: { Authorization: 'Bearer <the real token>' }` in full -- and
+ * stderr here is where the MCP client keeps its log file.
+ *
+ * printify-sdk-js@1.4 wraps axios errors in a plain Error before they reach
+ * us, so no Printify token is reaching the log today. That is the SDK's
+ * implementation detail rather than a contract, `axios` is a direct dependency
+ * of this package and already used in replicate-output.ts, and the
+ * `if (error.response)` branches in printify-api.ts are written for axios
+ * errors. This keeps the guarantee independent of all three.
+ *
+ * What is kept is what actually helps: the error name and message, the error
+ * code, the HTTP status, and the response body -- which is where Printify
+ * returns its validation errors.
+ */
+export function describeError(error: any): string {
+  if (error === null || error === undefined || typeof error !== 'object') {
+    return String(error);
+  }
+
+  const name = error.name || error.constructor?.name || 'Error';
+  const parts = [`${name}: ${error.message || '(no message)'}`];
+
+  if (error.code) {
+    parts.push(`code=${error.code}`);
+  }
+
+  if (error.response) {
+    const { status, statusText, data } = error.response;
+    parts.push(`status=${status}${statusText ? ` ${statusText}` : ''}`);
+    if (data !== undefined) {
+      parts.push(`body=${safeJson(data)}`);
+    }
+  }
+
+  if (typeof error.stack === 'string') {
+    const frames = error.stack
+      .split('\n')
+      .filter((line: string) => line.trim().startsWith('at '))
+      .slice(0, 3);
+    if (frames.length > 0) {
+      parts.push(`\n${frames.join('\n')}`);
+    }
+  }
+
+  return parts.join(' ');
+}
+
+/**
  * Format an error response for tool output
  */
 export function formatErrorResponse(

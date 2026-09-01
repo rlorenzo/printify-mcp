@@ -4,6 +4,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomBytes } from 'crypto';
+import { describeError } from './error-handler.js';
 
 /**
  * Ensure a directory exists, creating it if necessary
@@ -43,7 +44,7 @@ export function cleanupFiles(filePaths: string[]): void {
         fs.unlinkSync(filePath);
         console.error(`Cleaned up file: ${filePath}`);
       } catch (error) {
-        console.error(`Error cleaning up file ${filePath}:`, error);
+        console.error(`Error cleaning up file ${filePath}:`, describeError(error));
       }
     }
   });
