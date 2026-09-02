@@ -174,6 +174,42 @@ describe('createProduct', () => {
     expect(area.placeholders[1].images[0].id).toBe('img_b');
   });
 
+  it('scopes print areas to the variants a group names', async () => {
+    const { instance, create } = api();
+    await instance.createProduct({
+      title: 't', description: 'd', blueprintId: 1, printProviderId: 1,
+      variants: [{ id: 1, price: 100 }, { id: 2, price: 100 }],
+      printAreas: [
+        { variantIds: [1], placeholders: [{ position: 'front', imageId: 'img_a' }] },
+        { variantIds: [2], placeholders: [{ position: 'front', imageId: 'img_b' }] }
+      ]
+    });
+    const areas = create.mock.calls[0][0].print_areas;
+    expect(areas.map((a: any) => a.variant_ids)).toEqual([[1], [2]]);
+    expect(areas.map((a: any) => a.placeholders[0].images[0].id)).toEqual(['img_a', 'img_b']);
+  });
+
+  it('sends no print areas at all for an empty group list', async () => {
+    const { instance, create } = api();
+    await instance.createProduct({
+      title: 't', description: 'd', blueprintId: 1, printProviderId: 1,
+      variants: [{ id: 1, price: 100 }],
+      printAreas: []
+    });
+    // Not one all-variant entry carrying no placements.
+    expect(create.mock.calls[0][0].print_areas).toEqual([]);
+  });
+
+  it('sends no print areas at all for an empty flat map', async () => {
+    const { instance, create } = api();
+    await instance.createProduct({
+      title: 't', description: 'd', blueprintId: 1, printProviderId: 1,
+      variants: [{ id: 1, price: 100 }],
+      printAreas: {}
+    });
+    expect(create.mock.calls[0][0].print_areas).toEqual([]);
+  });
+
   it('refuses to run without a shop id', async () => {
     const { instance } = api();
     instance.setShopId('');
@@ -248,7 +284,7 @@ describe('updateProduct', () => {
     expect(areas[1].placeholders[1].images[0].id).toBe('img_back');
   });
 
-  it('passes explicit per-variant groups through untouched', async () => {
+  it('normalizes explicit per-variant groups and sends them as given', async () => {
     const { instance, updateOne, getOne } = api();
 
     await instance.updateProduct('prod_9', {
@@ -264,6 +300,62 @@ describe('updateProduct', () => {
     ]);
     // Explicit groups say everything the request needs; nothing to reconcile.
     expect(getOne).not.toHaveBeenCalled();
+  });
+
+  // An empty list is the only way to say "no print areas at all". Read as a
+  // flat map it would merge nothing and quietly leave the artwork in place.
+  it('clears print areas when given an empty group list', async () => {
+    const { instance, updateOne, getOne } = api();
+    getOne.mockResolvedValue(threeGroupProduct() as any);
+
+    await instance.updateProduct('prod_9', { printAreas: [] });
+
+    expect(updateOne.mock.calls[0][1].print_areas).toEqual([]);
+    expect(getOne).not.toHaveBeenCalled();
+  });
+
+  // A flat map with nothing in it says the same thing -- including when the
+  // product does have groups, which a merge would otherwise leave in place.
+  it('clears print areas when given an empty flat map', async () => {
+    const { instance, updateOne, getOne } = api();
+    getOne.mockResolvedValue(threeGroupProduct() as any);
+
+    await instance.updateProduct('prod_9', { printAreas: {} });
+
+    expect(updateOne.mock.calls[0][1].print_areas).toEqual([]);
+    expect(getOne).not.toHaveBeenCalled();
+  });
+
+  // `variantIds: []` is truthy, so it reaches the explicit-groups path; sent
+  // as-is it would attach the artwork to nothing.
+  it('rejects a print-area group that names no usable variant', async () => {
+    const { instance } = api();
+
+    await expect(instance.updateProduct('prod_9', {
+      printAreas: [{ variantIds: [], placeholders: [{ position: 'front', imageId: 'i' }] }]
+    })).rejects.toThrow(/at least one numeric variant id/);
+
+    await expect(instance.updateProduct('prod_9', {
+      printAreas: [{ variantIds: ['not-a-number'], placeholders: [{ position: 'front', imageId: 'i' }] }]
+    })).rejects.toThrow(/at least one numeric variant id/);
+  });
+
+  // An empty variant list is not a variant list; taking it would attach the
+  // artwork to no variants at all.
+  it('falls back to enabled variants when the update carries an empty variant list', async () => {
+    const { instance, updateOne, getOne } = api();
+    getOne.mockResolvedValue({
+      id: 'prod_9',
+      variants: [{ id: 7, is_enabled: true }, { id: 8, is_enabled: false }],
+      print_areas: []
+    } as any);
+
+    await instance.updateProduct('prod_9', {
+      variants: [],
+      printAreas: { front: { position: 'front', imageId: 'img_new' } }
+    });
+
+    expect(updateOne.mock.calls[0][1].print_areas[0].variant_ids).toEqual([7]);
   });
 
   it('keeps placeholders that already carry their own placement', async () => {

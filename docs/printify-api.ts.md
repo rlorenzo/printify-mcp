@@ -175,8 +175,10 @@ This method:
 
 1. Normalizes variants to the API's wire shape
 2. Formats print areas, if the update carries any:
-   - a list of `{ variantIds, placeholders }` groups is passed through, since it
-     already says which variants get which artwork
+   - a list of `{ variantIds, placeholders }` groups is normalized to the API's
+     wire shape and sent as given, with no fetch and no merge: it already says
+     which variants get which artwork. An empty list clears the product's print
+     areas
    - the flat `{ front: { position, imageId } }` map is merged into the
      product's existing variant groups, so per-colorway artwork survives an
      update that only means to change one placement. This reads the product

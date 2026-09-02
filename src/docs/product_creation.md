@@ -274,4 +274,9 @@ create_product({
    the ones it does not name are left alone. Use the list form when an update
    should only touch some variants.
 
+   Both empty forms — `printAreas: {}` and `printAreas: []` — clear every print
+   area on the product. They name no placements, so they are read as "no print
+   areas" rather than "change nothing"; omit `printAreas` entirely to leave the
+   existing artwork alone.
+
 5. **Publishing:** Products created through the API are automatically added to your Printify catalog but may need to be published to external sales channels.
