@@ -338,6 +338,11 @@ describe('updateProduct', () => {
     await expect(instance.updateProduct('prod_9', {
       printAreas: [{ variantIds: ['not-a-number'], placeholders: [{ position: 'front', imageId: 'i' }] }]
     })).rejects.toThrow(/at least one numeric variant id/);
+
+    // parseInt would read this as 12 and silently target that variant.
+    await expect(instance.updateProduct('prod_9', {
+      printAreas: [{ variantIds: ['12bad'], placeholders: [{ position: 'front', imageId: 'i' }] }]
+    })).rejects.toThrow(/at least one numeric variant id/);
   });
 
   // An empty variant list is not a variant list; taking it would attach the

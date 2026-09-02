@@ -584,9 +584,9 @@ Parameters:
   survive. Pass the array form (`[{ variantIds, placeholders }]`) to set
   artwork per colorway, or an empty array to clear the product's print areas.
   An empty object (`{}`) clears them too — it names no placements, so it is
-  read as "no print areas", not as "change nothing". The object form requires
-  reading the product first, so it fails rather than guessing if the product
-  cannot be fetched.
+  read as "no print areas", not as "change nothing". A *non-empty* object form
+  requires reading the product first, so it fails rather than guessing if the
+  product cannot be fetched.
 
 #### `delete-product`
 

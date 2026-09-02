@@ -79,12 +79,16 @@ function isPerVariantGroups(printAreasData: any): boolean {
  * numbers -- is rejected rather than sent: `variant_ids: []` attaches the
  * artwork to nothing, which the API accepts and silently drops. Clearing print
  * areas is what the empty *group list* is for.
+ *
+ * Ids are converted with `Number`, not `parseInt`: `parseInt('12bad')` is 12,
+ * so a typo'd id would quietly point the artwork at whichever variant happens
+ * to be numbered by the prefix.
  */
 function formatPrintAreaGroups(groups: any[]): any[] {
   return groups.map((group: any) => {
     const variantIds = (group.variant_ids || group.variantIds || [])
-      .map((id: any) => parseInt(id))
-      .filter((id: number) => Number.isInteger(id));
+      .map((id: any) => Number(id))
+      .filter((id: number) => Number.isInteger(id) && id > 0);
 
     if (variantIds.length === 0) {
       throw new Error(
