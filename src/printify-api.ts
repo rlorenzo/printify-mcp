@@ -13,26 +13,93 @@ export interface PrintifyShop {
 
 // Printify API client
 /**
- * Build one Printify print-area entry: the given variants plus a centred,
- * unrotated, unscaled placeholder per position.
+ * Build the placeholder list for one print-area entry.
+ *
+ * Accepts the tool-shaped form -- a map (or list) of `{ position, imageId }`,
+ * which becomes a centred, unrotated, unscaled single image -- and passes
+ * through placeholders that already carry their own `images`, so a caller who
+ * knows the exact placement Printify should store can say so.
+ */
+function buildPlaceholders(printAreasData: Record<string, any> | any[]): any[] {
+  const areas = Array.isArray(printAreasData) ? printAreasData : Object.values(printAreasData ?? {});
+  return areas.map((area: any) => (
+    Array.isArray(area.images)
+      ? { position: area.position, images: area.images }
+      : {
+          position: area.position,
+          images: [{
+            id: area.image_id || area.imageId,
+            x: 0.5,
+            y: 0.5,
+            scale: 1,
+            angle: 0
+          }]
+        }
+  ));
+}
+
+/**
+ * Build one Printify print-area entry: the given variants plus their placeholders.
  *
  * Shared by product creation and update, which format print areas identically;
- * they differ only in whether the entry is appended or replaces the list.
+ * they differ only in whether the entry is appended or merged into the list.
  */
-function buildPrintAreaEntry(variantIds: any[], printAreasData: Record<string, any>): any {
+function buildPrintAreaEntry(variantIds: any[], printAreasData: Record<string, any> | any[]): any {
   return {
     variant_ids: variantIds,
-    placeholders: Object.values(printAreasData).map((area: any) => ({
-      position: area.position,
-      images: [{
-        id: area.image_id || area.imageId,
-        x: 0.5,
-        y: 0.5,
-        scale: 1,
-        angle: 0
-      }]
-    }))
+    placeholders: buildPlaceholders(printAreasData)
   };
+}
+
+/**
+ * Does this input already name its own variant groups?
+ *
+ * Printify scopes each print area to a set of variant ids, which is how one
+ * product carries different artwork per colorway. The flat `{ front: {...} }`
+ * map cannot express that, so callers who need it pass a list of
+ * `{ variantIds, placeholders }` groups instead.
+ */
+function isPerVariantGroups(printAreasData: any): boolean {
+  return Array.isArray(printAreasData)
+    && printAreasData.length > 0
+    && printAreasData.every((group: any) => group && (group.variant_ids || group.variantIds));
+}
+
+/**
+ * Normalize caller-supplied variant groups to the API's wire shape, accepting
+ * `variantIds` or `variant_ids` and either placeholder form.
+ */
+function formatPrintAreaGroups(groups: any[]): any[] {
+  return groups.map((group: any) => ({
+    variant_ids: (group.variant_ids || group.variantIds || []).map((id: any) => parseInt(id)),
+    placeholders: buildPlaceholders(group.placeholders ?? {})
+  }));
+}
+
+/**
+ * Fold a flat print-area map into a product's existing variant groups.
+ *
+ * The flat form says "this image, this placement" without saying which
+ * variants it belongs to, so the only non-destructive reading is *every*
+ * group: each named placement is replaced wherever it already exists and
+ * appended where it does not, and every placement the caller did not mention
+ * survives untouched. Replacing the whole list with a single all-variant entry
+ * instead -- what this used to do -- silently collapses per-colorway artwork
+ * into one image with nothing in the response to show it happened.
+ */
+function mergePrintAreas(existingAreas: any[], printAreasData: Record<string, any> | any[]): any[] {
+  const incoming = buildPlaceholders(printAreasData);
+  const byPosition = new Map(incoming.map((placeholder: any) => [placeholder.position, placeholder]));
+
+  return existingAreas.map((area: any) => {
+    const placeholders = (area.placeholders ?? []).map((ph: any) => byPosition.get(ph.position) ?? ph);
+    const present = new Set(placeholders.map((ph: any) => ph.position));
+
+    return {
+      variant_ids: area.variant_ids ?? [],
+      placeholders: [...placeholders, ...incoming.filter((ph: any) => !present.has(ph.position))]
+    };
+  });
 }
 
 /**
@@ -268,11 +335,14 @@ export class PrintifyAPI {
 
       // Format print areas - handle both print_areas and printAreas formats
       const printAreasData = productData.print_areas || productData.printAreas;
-      if (printAreasData) {
-        // Get all variant IDs from the variants array
+      if (isPerVariantGroups(printAreasData)) {
+        // Per-colorway artwork, stated explicitly.
+        formattedData.print_areas = formatPrintAreaGroups(printAreasData);
+      } else if (printAreasData) {
+        // The flat form: one entry over every variant. Safe here in a way it is
+        // not on update -- a new product has no existing groups to overwrite.
         const variantIds = formattedData.variants.map((v: any) => v.id);
 
-        // Create a print area entry with all variants
         formattedData.print_areas.push(buildPrintAreaEntry(variantIds, printAreasData));
       }
 
@@ -316,37 +386,46 @@ export class PrintifyAPI {
       }
 
       // Format the product data if it contains print_areas
-      if (productData.print_areas || productData.printAreas) {
+      const printAreasData = productData.print_areas || productData.printAreas;
+      if (printAreasData) {
         const formattedData = { ...productData };
-        const printAreasData = formattedData.print_areas || formattedData.printAreas;
+        // Both spellings are accepted on the way in; only the API's own key
+        // goes out, so the SDK never sees a stray camelCase field.
+        delete formattedData.printAreas;
 
-        // If print_areas is provided, format it correctly
-        if (printAreasData) {
-          // Get the current product to get variant IDs if not provided
-          let variantIds: number[] = [];
-
-          if (formattedData.variants && Array.isArray(formattedData.variants)) {
-            // Use the variants from the update data
-            variantIds = formattedData.variants.map((v: any) => parseInt(v.id || v.variantId));
-          } else {
-            // Get the current product to get its variant IDs
-            try {
-              const currentProduct = await this.client.products.getOne(productId);
-              variantIds = currentProduct.variants
-                .filter((v: any) => v.is_enabled)
-                .map((v: any) => v.id);
-            } catch (error) {
-              console.error(`Error fetching current product ${productId}:`, describeError(error));
-              // Continue with empty variant IDs
-            }
+        if (isPerVariantGroups(printAreasData)) {
+          // The caller said which variants get which artwork. Take them at
+          // their word -- there is nothing to merge against.
+          formattedData.print_areas = formatPrintAreaGroups(printAreasData);
+        } else {
+          // A flat map has to be reconciled with what the product already has,
+          // so the update needs the live product. A failure here used to be
+          // swallowed and the update sent on with *empty* variant ids, which
+          // attaches the artwork to nothing; refusing is the only safe answer.
+          let currentProduct: any;
+          try {
+            currentProduct = await this.client.products.getOne(productId);
+          } catch (error) {
+            console.error(`Error fetching current product ${productId}:`, describeError(error));
+            throw new Error(
+              `Cannot update print areas: failed to fetch product ${productId} (${describeError(error)})`,
+              { cause: error }
+            );
           }
 
-          // Create a print area entry with all variants
-          formattedData.print_areas = [buildPrintAreaEntry(variantIds, printAreasData)];
+          const existingAreas = currentProduct?.print_areas ?? [];
+          if (existingAreas.length > 0) {
+            formattedData.print_areas = mergePrintAreas(existingAreas, printAreasData);
+          } else {
+            // Nothing to preserve: one entry over every variant being updated,
+            // falling back to the product's enabled variants.
+            const variantIds = Array.isArray(formattedData.variants)
+              ? formattedData.variants.map((v: any) => parseInt(v.id || v.variantId))
+              : (currentProduct?.variants ?? [])
+                  .filter((v: any) => v.is_enabled)
+                  .map((v: any) => v.id);
 
-          // Remove the printAreas property if it exists
-          if (formattedData.printAreas) {
-            delete formattedData.printAreas;
+            formattedData.print_areas = [buildPrintAreaEntry(variantIds, printAreasData)];
           }
         }
 

@@ -258,4 +258,20 @@ create_product({
    - left_sleeve
    - right_sleeve
 
+   The `printAreas` object above applies the same artwork to every variant.
+   Printify actually scopes print areas to variant IDs, so to give different
+   colorways different artwork, pass a list of groups instead:
+
+   ```javascript
+   printAreas: [
+     { variantIds: [18100, 18101], placeholders: [{ position: "front", imageId: "..." }] },
+     { variantIds: [18102], placeholders: [{ position: "front", imageId: "..." }] }
+   ]
+   ```
+
+   On `update_product` the object form is merged into whatever groups the
+   product already has: the placements it names are replaced everywhere, and
+   the ones it does not name are left alone. Use the list form when an update
+   should only touch some variants.
+
 5. **Publishing:** Products created through the API are automatically added to your Printify catalog but may need to be published to external sales channels.
