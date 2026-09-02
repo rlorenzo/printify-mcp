@@ -149,13 +149,24 @@ function mergePrintAreas(existingAreas: any[], printAreasData: Record<string, an
  * { id, price, is_enabled } with numeric ids and prices. Shared by create and
  * update, which previously disagreed: update passed variants through raw, so
  * an update carrying variants sent `variantId` to an API that reads `id`.
+ *
+ * This is the only place an untrusted variant id becomes a number, so it is
+ * where a bad one has to stop: `parseInt` turns 'abc' into NaN and '12bad'
+ * into 12, and either goes out on the wire as a variant id -- one the API
+ * rejects, one that silently prices and prints the wrong variant. Ids flow on
+ * to the print areas from here, so everything downstream can assume they are
+ * real.
  */
 function formatVariants(variants: any[]): any[] {
-  return variants.map((variant: any) => ({
-    id: parseInt(variant.id || variant.variantId),
-    price: parseInt(variant.price),
-    is_enabled: variant.isEnabled !== false
-  }));
+  return variants.map((variant: any) => {
+    const id = Number(variant.id ?? variant.variantId);
+
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new Error(`Invalid variant id: ${JSON.stringify(variant.id ?? variant.variantId)}. Variant ids must be positive integers.`);
+    }
+
+    return { id, price: parseInt(variant.price), is_enabled: variant.isEnabled !== false };
+  });
 }
 
 /**
@@ -466,7 +477,7 @@ export class PrintifyAPI {
             // variant list is not a variant list -- taking it would attach the
             // artwork to nothing.
             const variantIds = formattedData.variants?.length
-              ? formattedData.variants.map((v: any) => parseInt(v.id || v.variantId))
+              ? formattedData.variants.map((v: any) => v.id)
               : (currentProduct?.variants ?? [])
                   .filter((v: any) => v.is_enabled)
                   .map((v: any) => v.id);

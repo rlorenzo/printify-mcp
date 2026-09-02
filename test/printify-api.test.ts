@@ -210,6 +210,22 @@ describe('createProduct', () => {
     expect(create.mock.calls[0][0].print_areas).toEqual([]);
   });
 
+  // parseInt turned 'abc' into NaN and '12bad' into 12, and both went out as
+  // variant ids -- one the API rejects, one that hits the wrong variant.
+  it('refuses variant ids that are not positive integers', async () => {
+    const { instance, create } = api();
+    const product = (id: any) => ({
+      title: 't', description: 'd', blueprintId: 1, printProviderId: 1,
+      variants: [{ id, price: 100 }]
+    });
+
+    for (const bad of ['abc', '12bad', 0, -1, 1.5]) {
+      await expect(instance.createProduct(product(bad))).rejects.toThrow(/Invalid variant id/);
+    }
+
+    expect(create).not.toHaveBeenCalled();
+  });
+
   // Placements with no variants to carry them would go out as
   // `variant_ids: []`, which the API accepts and then drops.
   it('refuses print areas when there are no variants to attach them to', async () => {
