@@ -173,8 +173,17 @@ async updateProduct(productId: string, productData: any)
 
 This method:
 
-1. Formats the product data if it contains print areas
-2. Handles variants and print areas
+1. Normalizes variants to the API's wire shape
+2. Formats print areas, if the update carries any:
+   - a list of `{ variantIds, placeholders }` groups is normalized to the API's
+     wire shape and sent as given, with no fetch and no merge: it already says
+     which variants get which artwork. An empty list clears the product's print
+     areas
+   - the flat `{ front: { position, imageId } }` map is merged into the
+     product's existing variant groups, so per-colorway artwork survives an
+     update that only means to change one placement. This reads the product
+     first and fails if that read fails, rather than sending a print area
+     attached to no variants
 3. Calls the Printify API to update the product
 4. Enhances errors with detailed information for debugging
 

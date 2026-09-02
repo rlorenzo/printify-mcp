@@ -39,6 +39,30 @@ export interface PrintifyContext {
 
 type ToolResult = { content: any[]; isError?: boolean };
 
+/**
+ * Print areas, in either of the two shapes the API layer accepts.
+ *
+ * The flat map names a placement and an image and says nothing about variants:
+ * on create it covers every variant, on update it is merged into whatever
+ * groups the product already has. The list form scopes each set of placements
+ * to explicit variant ids, which is how one product carries different artwork
+ * per colorway -- unreachable through the flat map, and destroyed by it before
+ * the merge existed.
+ */
+const printAreasSchema = z.union([
+  z.record(z.string(), z.object({
+    position: z.string().describe("Print position (e.g., 'front', 'back')"),
+    imageId: z.string().describe("Image ID from Printify uploads")
+  })).describe("One entry per placement, applied to every variant"),
+  z.array(z.object({
+    variantIds: z.array(z.number()).describe("Variant IDs this artwork applies to"),
+    placeholders: z.array(z.object({
+      position: z.string().describe("Print position (e.g., 'front', 'back')"),
+      imageId: z.string().describe("Image ID from Printify uploads")
+    })).describe("Placements for these variants")
+  })).describe("One entry per variant group, for per-colorway artwork")
+]);
+
 /** A context whose Printify client is known to be configured. */
 type ReadyContext = PrintifyContext & { printifyClient: PrintifyAPI };
 
@@ -271,10 +295,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
         price: z.number().describe("Price in cents (e.g., 1999 for $19.99)"),
         isEnabled: z.boolean().optional().default(true).describe("Whether the variant is enabled")
       })).describe("Product variants"),
-      printAreas: z.record(z.string(), z.object({
-        position: z.string().describe("Print position (e.g., 'front', 'back')"),
-        imageId: z.string().describe("Image ID from Printify uploads")
-      })).optional().describe("Print areas for the product"),
+      printAreas: printAreasSchema.optional().describe("Print areas for the product"),
       tags: z.array(z.string()).optional().describe("Tags for the product")
     },
     async ({ title, description, blueprintId, printProviderId, variants, printAreas, tags }): Promise<{ content: any[], isError?: boolean }> => {
@@ -310,10 +331,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
         price: z.number().describe("Price in cents (e.g., 1999 for $19.99)"),
         isEnabled: z.boolean().optional().describe("Whether the variant is enabled")
       })).optional().describe("Product variants"),
-      printAreas: z.record(z.string(), z.object({
-        position: z.string().describe("Print position (e.g., 'front', 'back')"),
-        imageId: z.string().describe("Image ID from Printify uploads")
-      })).optional().describe("Print areas for the product"),
+      printAreas: printAreasSchema.optional().describe("Print areas for the product"),
       tags: z.array(z.string()).optional().describe("Tags for the product")
     },
     async ({ productId, title, description, variants, printAreas, tags }): Promise<{ content: any[], isError?: boolean }> => {

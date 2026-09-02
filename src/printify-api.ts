@@ -13,26 +13,133 @@ export interface PrintifyShop {
 
 // Printify API client
 /**
- * Build one Printify print-area entry: the given variants plus a centred,
- * unrotated, unscaled placeholder per position.
+ * Build the placeholder list for one print-area entry.
  *
- * Shared by product creation and update, which format print areas identically;
- * they differ only in whether the entry is appended or replaces the list.
+ * Accepts the tool-shaped form -- a map (or list) of `{ position, imageId }`,
+ * which becomes a centred, unrotated, unscaled single image -- and passes
+ * through placeholders that already carry their own `images`, so a caller who
+ * knows the exact placement Printify should store can say so.
  */
-function buildPrintAreaEntry(variantIds: any[], printAreasData: Record<string, any>): any {
-  return {
-    variant_ids: variantIds,
-    placeholders: Object.values(printAreasData).map((area: any) => ({
-      position: area.position,
-      images: [{
-        id: area.image_id || area.imageId,
-        x: 0.5,
-        y: 0.5,
-        scale: 1,
-        angle: 0
-      }]
-    }))
-  };
+function buildPlaceholders(printAreasData: Record<string, any> | any[]): any[] {
+  const areas = Array.isArray(printAreasData) ? printAreasData : Object.values(printAreasData ?? {});
+  return areas.map((area: any) => (
+    Array.isArray(area.images)
+      ? { position: area.position, images: area.images }
+      : {
+          position: area.position,
+          images: [{
+            id: area.image_id || area.imageId,
+            x: 0.5,
+            y: 0.5,
+            scale: 1,
+            angle: 0
+          }]
+        }
+  ));
+}
+
+/**
+ * Build the print-area list for a flat map: one entry covering the given
+ * variants, or none at all when the map names no placements.
+ *
+ * An empty map is the flat form's way of saying "no print areas", the same
+ * thing an empty group list says. Sending one entry with an empty
+ * `placeholders` array instead is not that request -- it is a malformed print
+ * area that the API has no reason to accept.
+ *
+ * Placements with no variants to carry them are rejected for the same reason
+ * `formatPrintAreaGroups` rejects an empty group: `variant_ids: []` is accepted
+ * by the API and then attaches the artwork to nothing. It is reachable from
+ * either side -- a create carrying no variants, or an update whose product has
+ * no enabled ones -- and neither is worth sending.
+ *
+ * Shared by product creation and update, which format print areas identically.
+ */
+function buildPrintAreas(variantIds: any[], printAreasData: Record<string, any> | any[]): any[] {
+  const placeholders = buildPlaceholders(printAreasData);
+  if (placeholders.length === 0) return [];
+
+  if (variantIds.length === 0) {
+    throw new Error(
+      'Cannot apply print areas to zero variants. Supply the variants the ' +
+      'artwork belongs to, or pass per-variant groups that name them.'
+    );
+  }
+
+  return [{ variant_ids: variantIds, placeholders }];
+}
+
+/**
+ * Does this input already name its own variant groups?
+ *
+ * Printify scopes each print area to a set of variant ids, which is how one
+ * product carries different artwork per colorway. The flat `{ front: {...} }`
+ * map cannot express that, so callers who need it pass a list of
+ * `{ variantIds, placeholders }` groups instead.
+ *
+ * An empty list counts as one: it is the only way to say "no print areas at
+ * all", and reading it as a flat map instead makes that request a silent no-op
+ * on update and an empty all-variant entry on create.
+ */
+function isPerVariantGroups(printAreasData: any): boolean {
+  return Array.isArray(printAreasData)
+    && printAreasData.every((group: any) => group && (group.variant_ids || group.variantIds));
+}
+
+/**
+ * Normalize caller-supplied variant groups to the API's wire shape, accepting
+ * `variantIds` or `variant_ids` and either placeholder form.
+ *
+ * A group that names no usable variant -- an empty list, or ids that are not
+ * numbers -- is rejected rather than sent: `variant_ids: []` attaches the
+ * artwork to nothing, which the API accepts and silently drops. Clearing print
+ * areas is what the empty *group list* is for.
+ *
+ * Ids are converted with `Number`, not `parseInt`: `parseInt('12bad')` is 12,
+ * so a typo'd id would quietly point the artwork at whichever variant happens
+ * to be numbered by the prefix.
+ */
+function formatPrintAreaGroups(groups: any[]): any[] {
+  return groups.map((group: any) => {
+    const variantIds = (group.variant_ids || group.variantIds || [])
+      .map((id: any) => Number(id))
+      .filter((id: number) => Number.isInteger(id) && id > 0);
+
+    if (variantIds.length === 0) {
+      throw new Error(
+        'Each print-area group must name at least one numeric variant id. ' +
+        'To clear a product\'s print areas, pass an empty group list instead.'
+      );
+    }
+
+    return { variant_ids: variantIds, placeholders: buildPlaceholders(group.placeholders ?? {}) };
+  });
+}
+
+/**
+ * Fold a flat print-area map into a product's existing variant groups.
+ *
+ * The flat form says "this image, this placement" without saying which
+ * variants it belongs to, so the only non-destructive reading is *every*
+ * group: each named placement is replaced wherever it already exists and
+ * appended where it does not, and every placement the caller did not mention
+ * survives untouched. Replacing the whole list with a single all-variant entry
+ * instead -- what this used to do -- silently collapses per-colorway artwork
+ * into one image with nothing in the response to show it happened.
+ */
+function mergePrintAreas(existingAreas: any[], printAreasData: Record<string, any> | any[]): any[] {
+  const incoming = buildPlaceholders(printAreasData);
+  const byPosition = new Map(incoming.map((placeholder: any) => [placeholder.position, placeholder]));
+
+  return existingAreas.map((area: any) => {
+    const placeholders = (area.placeholders ?? []).map((ph: any) => byPosition.get(ph.position) ?? ph);
+    const present = new Set(placeholders.map((ph: any) => ph.position));
+
+    return {
+      variant_ids: area.variant_ids ?? [],
+      placeholders: [...placeholders, ...incoming.filter((ph: any) => !present.has(ph.position))]
+    };
+  });
 }
 
 /**
@@ -42,13 +149,24 @@ function buildPrintAreaEntry(variantIds: any[], printAreasData: Record<string, a
  * { id, price, is_enabled } with numeric ids and prices. Shared by create and
  * update, which previously disagreed: update passed variants through raw, so
  * an update carrying variants sent `variantId` to an API that reads `id`.
+ *
+ * This is the only place an untrusted variant id becomes a number, so it is
+ * where a bad one has to stop: `parseInt` turns 'abc' into NaN and '12bad'
+ * into 12, and either goes out on the wire as a variant id -- one the API
+ * rejects, one that silently prices and prints the wrong variant. Ids flow on
+ * to the print areas from here, so everything downstream can assume they are
+ * real.
  */
 function formatVariants(variants: any[]): any[] {
-  return variants.map((variant: any) => ({
-    id: parseInt(variant.id || variant.variantId),
-    price: parseInt(variant.price),
-    is_enabled: variant.isEnabled !== false
-  }));
+  return variants.map((variant: any) => {
+    const id = Number(variant.id ?? variant.variantId);
+
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new Error(`Invalid variant id: ${JSON.stringify(variant.id ?? variant.variantId)}. Variant ids must be positive integers.`);
+    }
+
+    return { id, price: parseInt(variant.price), is_enabled: variant.isEnabled !== false };
+  });
 }
 
 /**
@@ -268,12 +386,15 @@ export class PrintifyAPI {
 
       // Format print areas - handle both print_areas and printAreas formats
       const printAreasData = productData.print_areas || productData.printAreas;
-      if (printAreasData) {
-        // Get all variant IDs from the variants array
+      if (isPerVariantGroups(printAreasData)) {
+        // Per-colorway artwork, stated explicitly.
+        formattedData.print_areas = formatPrintAreaGroups(printAreasData);
+      } else if (printAreasData) {
+        // The flat form: one entry over every variant. Safe here in a way it is
+        // not on update -- a new product has no existing groups to overwrite.
         const variantIds = formattedData.variants.map((v: any) => v.id);
 
-        // Create a print area entry with all variants
-        formattedData.print_areas.push(buildPrintAreaEntry(variantIds, printAreasData));
+        formattedData.print_areas = buildPrintAreas(variantIds, printAreasData);
       }
 
       console.error(`Creating product with shop ID: ${this.shopId}`);
@@ -316,37 +437,52 @@ export class PrintifyAPI {
       }
 
       // Format the product data if it contains print_areas
-      if (productData.print_areas || productData.printAreas) {
+      const printAreasData = productData.print_areas || productData.printAreas;
+      if (printAreasData) {
         const formattedData = { ...productData };
-        const printAreasData = formattedData.print_areas || formattedData.printAreas;
+        // Both spellings are accepted on the way in; only the API's own key
+        // goes out, so the SDK never sees a stray camelCase field.
+        delete formattedData.printAreas;
 
-        // If print_areas is provided, format it correctly
-        if (printAreasData) {
-          // Get the current product to get variant IDs if not provided
-          let variantIds: number[] = [];
-
-          if (formattedData.variants && Array.isArray(formattedData.variants)) {
-            // Use the variants from the update data
-            variantIds = formattedData.variants.map((v: any) => parseInt(v.id || v.variantId));
-          } else {
-            // Get the current product to get its variant IDs
-            try {
-              const currentProduct = await this.client.products.getOne(productId);
-              variantIds = currentProduct.variants
-                .filter((v: any) => v.is_enabled)
-                .map((v: any) => v.id);
-            } catch (error) {
-              console.error(`Error fetching current product ${productId}:`, describeError(error));
-              // Continue with empty variant IDs
-            }
+        if (isPerVariantGroups(printAreasData)) {
+          // The caller said which variants get which artwork. Take them at
+          // their word -- there is nothing to merge against.
+          formattedData.print_areas = formatPrintAreaGroups(printAreasData);
+        } else if (buildPlaceholders(printAreasData).length === 0) {
+          // A flat map naming no placements says what an empty group list says:
+          // no print areas. There is nothing to reconcile, so no fetch either.
+          formattedData.print_areas = [];
+        } else {
+          // A flat map has to be reconciled with what the product already has,
+          // so the update needs the live product. A failure here used to be
+          // swallowed and the update sent on with *empty* variant ids, which
+          // attaches the artwork to nothing; refusing is the only safe answer.
+          let currentProduct: any;
+          try {
+            currentProduct = await this.client.products.getOne(productId);
+          } catch (error) {
+            console.error(`Error fetching current product ${productId}:`, describeError(error));
+            throw new Error(
+              `Cannot update print areas: failed to fetch product ${productId} (${describeError(error)})`,
+              { cause: error }
+            );
           }
 
-          // Create a print area entry with all variants
-          formattedData.print_areas = [buildPrintAreaEntry(variantIds, printAreasData)];
+          const existingAreas = currentProduct?.print_areas ?? [];
+          if (existingAreas.length > 0) {
+            formattedData.print_areas = mergePrintAreas(existingAreas, printAreasData);
+          } else {
+            // Nothing to preserve: one entry over every variant being updated,
+            // falling back to the product's enabled variants. An *empty*
+            // variant list is not a variant list -- taking it would attach the
+            // artwork to nothing.
+            const variantIds = formattedData.variants?.length
+              ? formattedData.variants.map((v: any) => v.id)
+              : (currentProduct?.variants ?? [])
+                  .filter((v: any) => v.is_enabled)
+                  .map((v: any) => v.id);
 
-          // Remove the printAreas property if it exists
-          if (formattedData.printAreas) {
-            delete formattedData.printAreas;
+            formattedData.print_areas = buildPrintAreas(variantIds, printAreasData);
           }
         }
 

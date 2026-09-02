@@ -14,16 +14,33 @@ interface ProductVariantInput {
 }
 
 /**
- * Print areas, one entry per placement.
- *
- * The key is the caller's own label for the entry and never reaches Printify:
- * buildPrintAreaEntry reads Object.values() and takes the placement from each
- * value's `position`.
+ * One placement: where the image goes and which image it is.
  */
-type ProductPrintAreas = Record<string, {
+interface PrintAreaPlaceholderInput {
   position: string;
   imageId: string;
-}>;
+}
+
+/**
+ * Print areas, one entry per placement, applied to every variant.
+ *
+ * The key is the caller's own label for the entry and never reaches Printify:
+ * buildPlaceholders reads Object.values() and takes the placement from each
+ * value's `position`.
+ */
+type FlatPrintAreas = Record<string, PrintAreaPlaceholderInput>;
+
+/**
+ * Print areas scoped to explicit variants, which is how Printify stores them
+ * and the only shape that can carry different artwork per colorway. The flat
+ * map cannot express it; on update it is merged into these groups instead.
+ */
+interface PrintAreaGroupInput {
+  variantIds: number[];
+  placeholders: PrintAreaPlaceholderInput[];
+}
+
+type ProductPrintAreas = FlatPrintAreas | PrintAreaGroupInput[];
 
 /**
  * Fields that can be changed on an existing product.

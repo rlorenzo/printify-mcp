@@ -563,7 +563,10 @@ Parameters:
 - `blueprintId` (number): Blueprint ID
 - `printProviderId` (number): Print provider ID
 - `variants` (array): Product variants
-- `printAreas` (object, optional): Print areas for the product
+- `printAreas` (object or array, optional): Print areas for the product. As an
+  object, one entry per placement (`{ "front": { position, imageId } }`),
+  applied to every variant. As an array, one entry per variant group
+  (`[{ variantIds, placeholders }]`), for different artwork per colorway.
 
 #### `update-product`
 
@@ -575,7 +578,15 @@ Parameters:
 - `title` (string, optional): Product title
 - `description` (string, optional): Product description
 - `variants` (array, optional): Product variants
-- `printAreas` (object, optional): Print areas for the product
+- `printAreas` (object or array, optional): Print areas for the product. The
+  object form is *merged* into the product's existing variant groups: each
+  placement it names is replaced everywhere, and placements it does not name
+  survive. Pass the array form (`[{ variantIds, placeholders }]`) to set
+  artwork per colorway, or an empty array to clear the product's print areas.
+  An empty object (`{}`) clears them too — it names no placements, so it is
+  read as "no print areas", not as "change nothing". A *non-empty* object form
+  requires reading the product first, so it fails rather than guessing if the
+  product cannot be fetched.
 
 #### `delete-product`
 
