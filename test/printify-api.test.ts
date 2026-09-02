@@ -210,6 +210,20 @@ describe('createProduct', () => {
     expect(create.mock.calls[0][0].print_areas).toEqual([]);
   });
 
+  // Placements with no variants to carry them would go out as
+  // `variant_ids: []`, which the API accepts and then drops.
+  it('refuses print areas when there are no variants to attach them to', async () => {
+    const { instance, create } = api();
+
+    await expect(instance.createProduct({
+      title: 't', description: 'd', blueprintId: 1, printProviderId: 1,
+      variants: [],
+      printAreas: { front: { position: 'front', imageId: 'img_a' } }
+    })).rejects.toThrow(/zero variants/);
+
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it('refuses to run without a shop id', async () => {
     const { instance } = api();
     instance.setShopId('');
@@ -361,6 +375,21 @@ describe('updateProduct', () => {
     });
 
     expect(updateOne.mock.calls[0][1].print_areas[0].variant_ids).toEqual([7]);
+  });
+
+  it('refuses print areas when the product has no enabled variants', async () => {
+    const { instance, updateOne, getOne } = api();
+    getOne.mockResolvedValue({
+      id: 'prod_9',
+      variants: [{ id: 7, is_enabled: false }],
+      print_areas: []
+    } as any);
+
+    await expect(instance.updateProduct('prod_9', {
+      printAreas: { front: { position: 'front', imageId: 'img_new' } }
+    })).rejects.toThrow(/zero variants/);
+
+    expect(updateOne).not.toHaveBeenCalled();
   });
 
   it('keeps placeholders that already carry their own placement', async () => {

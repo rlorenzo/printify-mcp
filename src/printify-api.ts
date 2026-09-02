@@ -47,11 +47,26 @@ function buildPlaceholders(printAreasData: Record<string, any> | any[]): any[] {
  * `placeholders` array instead is not that request -- it is a malformed print
  * area that the API has no reason to accept.
  *
+ * Placements with no variants to carry them are rejected for the same reason
+ * `formatPrintAreaGroups` rejects an empty group: `variant_ids: []` is accepted
+ * by the API and then attaches the artwork to nothing. It is reachable from
+ * either side -- a create carrying no variants, or an update whose product has
+ * no enabled ones -- and neither is worth sending.
+ *
  * Shared by product creation and update, which format print areas identically.
  */
 function buildPrintAreas(variantIds: any[], printAreasData: Record<string, any> | any[]): any[] {
   const placeholders = buildPlaceholders(printAreasData);
-  return placeholders.length > 0 ? [{ variant_ids: variantIds, placeholders }] : [];
+  if (placeholders.length === 0) return [];
+
+  if (variantIds.length === 0) {
+    throw new Error(
+      'Cannot apply print areas to zero variants. Supply the variants the ' +
+      'artwork belongs to, or pass per-variant groups that name them.'
+    );
+  }
+
+  return [{ variant_ids: variantIds, placeholders }];
 }
 
 /**
