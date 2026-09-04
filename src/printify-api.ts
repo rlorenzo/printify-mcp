@@ -16,7 +16,7 @@ export interface PrintifyShop {
 export function requireShop(client: PrintifyAPI): PrintifyShop {
   const shop = client.getCurrentShop();
   if (!shop) {
-    throw new Error('No shop is currently selected. Use the list-shops and switch-shop tools to select a shop.');
+    throw new Error('No shop is currently selected. Use the list_shops and switch_shop tools to select a shop.');
   }
   return shop;
 }
