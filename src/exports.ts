@@ -11,6 +11,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { PrintifyAPI } from "./printify-api.js";
 import { ReplicateClient } from "./replicate-client.js";
 import { DefaultsManager } from "./model-manager.js";
+import { VERSION } from './version.js';
 import { registerTools, type PrintifyContext } from "./tools.js";
 
 // Public surface
@@ -25,6 +26,7 @@ export * from './services/printify-blueprints.js';
 export * from './services/printify-shops.js';
 export * from './utils/error-handler.js';
 export * from './utils/file-utils.js';
+export { VERSION } from './version.js';
 
 /**
  * Create a Printify MCP server with the full tool surface registered.
@@ -41,7 +43,7 @@ export function createPrintifyMcpServer(options?: {
 }) {
   const server = new McpServer({
     name: options?.serverName || "Printify-MCP",
-    version: options?.serverVersion || "1.0.0"
+    version: options?.serverVersion || VERSION
   });
 
   const printifyApiKey = options?.printifyApiKey || process.env.PRINTIFY_API_KEY;

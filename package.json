@@ -1,5 +1,5 @@
 {
-  "name": "@tsavo/printify-mcp",
+  "name": "@rlorenzo/printify-mcp",
   "version": "0.1.1",
   "description": "A Model Context Protocol (MCP) server for integrating AI assistants with Printify's print-on-demand platform",
   "type": "module",
@@ -55,12 +55,15 @@
   "license": "ISC",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/TSavo/printify-mcp.git"
+    "url": "git+https://github.com/rlorenzo/printify-mcp.git"
   },
   "bugs": {
-    "url": "https://github.com/TSavo/printify-mcp/issues"
+    "url": "https://github.com/rlorenzo/printify-mcp/issues"
   },
-  "homepage": "https://github.com/TSavo/printify-mcp#readme",
+  "homepage": "https://github.com/rlorenzo/printify-mcp#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=24.0.0"
   },
