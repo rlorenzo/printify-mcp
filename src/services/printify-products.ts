@@ -1,7 +1,7 @@
 /**
  * Printify products service for Printify MCP
  */
-import { PrintifyAPI } from '../printify-api.js';
+import { PrintifyAPI, requireShop } from '../printify-api.js';
 import { describeError, formatErrorResponse, formatSuccessResponse } from '../utils/error-handler.js';
 
 /**
@@ -75,11 +75,7 @@ export async function listProducts(
   } = {}
 ) {
   try {
-    // Validate shop is selected
-    const currentShop = printifyClient.getCurrentShop();
-    if (!currentShop) {
-      throw new Error('No shop is currently selected. Use the list-shops and switch-shop tools to select a shop.');
-    }
+    const currentShop = requireShop(printifyClient);
 
     // Set default options
     const limit = options.limit || 10;
@@ -134,11 +130,7 @@ export async function getProduct(
   productId: string
 ) {
   try {
-    // Validate shop is selected
-    const currentShop = printifyClient.getCurrentShop();
-    if (!currentShop) {
-      throw new Error('No shop is currently selected. Use the list-shops and switch-shop tools to select a shop.');
-    }
+    const currentShop = requireShop(printifyClient);
 
     // Get product
     const product = await printifyClient.getProduct(productId);
@@ -233,11 +225,7 @@ export async function createProduct(
   productData: CreateProductData
 ) {
   try {
-    // Validate shop is selected
-    const currentShop = printifyClient.getCurrentShop();
-    if (!currentShop) {
-      throw new Error('No shop is currently selected. Use the list-shops and switch-shop tools to select a shop.');
-    }
+    const currentShop = requireShop(printifyClient);
 
     // Create product
     const product = await printifyClient.createProduct(productData);
@@ -292,11 +280,7 @@ export async function updateProduct(
   updateData: UpdateProductData
 ) {
   try {
-    // Validate shop is selected
-    const currentShop = printifyClient.getCurrentShop();
-    if (!currentShop) {
-      throw new Error('No shop is currently selected. Use the list-shops and switch-shop tools to select a shop.');
-    }
+    const currentShop = requireShop(printifyClient);
 
     // Update product
     const product = await printifyClient.updateProduct(productId, updateData);
@@ -347,11 +331,7 @@ export async function deleteProduct(
   productId: string
 ) {
   try {
-    // Validate shop is selected
-    const currentShop = printifyClient.getCurrentShop();
-    if (!currentShop) {
-      throw new Error('No shop is currently selected. Use the list-shops and switch-shop tools to select a shop.');
-    }
+    const currentShop = requireShop(printifyClient);
 
     // Delete product
     await printifyClient.deleteProduct(productId);
@@ -404,11 +384,7 @@ export async function publishProduct(
   }
 ) {
   try {
-    // Validate shop is selected
-    const currentShop = printifyClient.getCurrentShop();
-    if (!currentShop) {
-      throw new Error('No shop is currently selected. Use the list-shops and switch-shop tools to select a shop.');
-    }
+    const currentShop = requireShop(printifyClient);
 
     // Publish product
     const result = await printifyClient.publishProduct(productId, publishDetails);

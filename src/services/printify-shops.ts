@@ -129,7 +129,7 @@ export async function switchPrintifyShop(printifyClient: PrintifyAPI, shopId: st
     const shop = shops.find((s: any) => s.id.toString() === shopId);
     
     if (!shop) {
-      throw new Error(`Shop with ID ${shopId} not found. Use the list-shops tool to see available shops.`);
+      throw new Error(`Shop with ID ${shopId} not found. Use the list_shops tool to see available shops.`);
     }
     
     // Switch to the requested shop
@@ -159,7 +159,7 @@ export async function switchPrintifyShop(printifyClient: PrintifyAPI, shopId: st
         },
         [
           'Check that the shop ID is valid',
-          'Use the list-shops tool to see available shops',
+          'Use the list_shops tool to see available shops',
           'Ensure your Printify account is properly connected'
         ]
       )
