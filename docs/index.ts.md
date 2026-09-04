@@ -86,30 +86,30 @@ The server exposes the following tools to AI assistants:
 
 ### Printify Status and Shop Management
 
-1. **get-printify-status**: Get the current status of the Printify API client
-2. **list-shops**: List all available shops in the Printify account
-3. **switch-shop**: Switch to a different shop
+1. **get_printify_status**: Get the current status of the Printify API client
+2. **list_shops**: List all available shops in the Printify account
+3. **switch_shop**: Switch to a different shop
 
 ### Product Management
 
-4. **list-products**: List products in the current shop
-5. **get-product**: Get details of a specific product
-6. **create-product**: Create a new product
-7. **update-product**: Update an existing product
-8. **delete-product**: Delete a product
-9. **publish-product**: Publish a product to external sales channels
+4. **list_products**: List products in the current shop
+5. **get_product**: Get details of a specific product
+6. **create_product**: Create a new product
+7. **update_product**: Update an existing product
+8. **delete_product**: Delete a product
+9. **publish_product**: Publish a product to external sales channels
 
 ### Blueprint and Variant Management
 
-10. **get-blueprints**: Get available product blueprints
-11. **get-blueprint**: Get details of a specific blueprint
-12. **get-print-providers**: Get print providers for a blueprint
-13. **get-variants**: Get variants for a blueprint and print provider
+10. **get_blueprints**: Get available product blueprints
+11. **get_blueprint**: Get details of a specific blueprint
+12. **get_print_providers**: Get print providers for a blueprint
+13. **get_variants**: Get variants for a blueprint and print provider
 
 ### Image Management
 
-14. **upload-image**: Upload an image to Printify
-15. **generate-and-upload-image**: Generate an image with AI and upload it to Printify
+14. **upload_image**: Upload an image to Printify
+15. **generate_and_upload_image**: Generate an image with AI and upload it to Printify
 
 ### Documentation
 
@@ -117,17 +117,17 @@ The server exposes the following tools to AI assistants:
 
 ### Prompts
 
-17. **generate-product-description**: Generate a product description using AI
+17. **generate_product_description**: Generate a product description using AI
 
 ## Tool Implementation Details
 
-### get-printify-status
+### get_printify_status
 
 Gets the current status of the Printify API client, including connection status, available shops, and current shop.
 
 ```typescript
 server.tool(
-  "get-printify-status",
+  "get_printify_status",
   {},
   async () => {
     // ...
@@ -135,13 +135,13 @@ server.tool(
 );
 ```
 
-### list-shops
+### list_shops
 
 Lists all available shops in the Printify account.
 
 ```typescript
 server.tool(
-  "list-shops",
+  "list_shops",
   {},
   async () => {
     // ...
@@ -149,13 +149,13 @@ server.tool(
 );
 ```
 
-### switch-shop
+### switch_shop
 
 Switches to a different shop by ID.
 
 ```typescript
 server.tool(
-  "switch-shop",
+  "switch_shop",
   {
     shopId: z.string().describe("The ID of the shop to switch to")
   },
@@ -165,13 +165,13 @@ server.tool(
 );
 ```
 
-### list-products
+### list_products
 
 Lists products in the current shop with pagination.
 
 ```typescript
 server.tool(
-  "list-products",
+  "list_products",
   {
     page: z.number().optional().default(1).describe("Page number"),
     limit: z.number().optional().default(10).describe("Number of products per page")
@@ -182,13 +182,13 @@ server.tool(
 );
 ```
 
-### get-product
+### get_product
 
 Gets details of a specific product by ID.
 
 ```typescript
 server.tool(
-  "get-product",
+  "get_product",
   {
     productId: z.string().describe("Product ID")
   },
@@ -198,13 +198,13 @@ server.tool(
 );
 ```
 
-### create-product
+### create_product
 
 Creates a new product with the specified details.
 
 ```typescript
 server.tool(
-  "create-product",
+  "create_product",
   {
     title: z.string().describe("Product title"),
     description: z.string().describe("Product description"),
@@ -226,13 +226,13 @@ server.tool(
 );
 ```
 
-### update-product
+### update_product
 
 Updates an existing product with the specified details.
 
 ```typescript
 server.tool(
-  "update-product",
+  "update_product",
   {
     productId: z.string().describe("Product ID"),
     title: z.string().optional().describe("Product title"),
@@ -253,13 +253,13 @@ server.tool(
 );
 ```
 
-### delete-product
+### delete_product
 
 Deletes a product by ID.
 
 ```typescript
 server.tool(
-  "delete-product",
+  "delete_product",
   {
     productId: z.string().describe("Product ID")
   },
@@ -269,13 +269,13 @@ server.tool(
 );
 ```
 
-### publish-product
+### publish_product
 
 Publishes a product to external sales channels.
 
 ```typescript
 server.tool(
-  "publish-product",
+  "publish_product",
   {
     productId: z.string().describe("Product ID"),
     publishDetails: z.object({
@@ -292,13 +292,13 @@ server.tool(
 );
 ```
 
-### get-blueprints
+### get_blueprints
 
 Gets available product blueprints with pagination.
 
 ```typescript
 server.tool(
-  "get-blueprints",
+  "get_blueprints",
   {
     page: z.number().optional().default(1).describe("Page number"),
     limit: z.number().optional().default(10).describe("Number of blueprints per page")
@@ -309,13 +309,13 @@ server.tool(
 );
 ```
 
-### get-blueprint
+### get_blueprint
 
 Gets details of a specific blueprint by ID.
 
 ```typescript
 server.tool(
-  "get-blueprint",
+  "get_blueprint",
   {
     blueprintId: z.string().describe("Blueprint ID")
   },
@@ -325,13 +325,13 @@ server.tool(
 );
 ```
 
-### get-print-providers
+### get_print_providers
 
 Gets print providers for a blueprint.
 
 ```typescript
 server.tool(
-  "get-print-providers",
+  "get_print_providers",
   {
     blueprintId: z.string().describe("Blueprint ID")
   },
@@ -341,13 +341,13 @@ server.tool(
 );
 ```
 
-### get-variants
+### get_variants
 
 Gets variants for a blueprint and print provider.
 
 ```typescript
 server.tool(
-  "get-variants",
+  "get_variants",
   {
     blueprintId: z.string().describe("Blueprint ID"),
     printProviderId: z.string().describe("Print provider ID")
@@ -358,13 +358,13 @@ server.tool(
 );
 ```
 
-### upload-image
+### upload_image
 
 Uploads an image to Printify from a URL, local file, or base64 data.
 
 ```typescript
 server.tool(
-  "upload-image",
+  "upload_image",
   {
     fileName: z.string().describe("File name"),
     url: z.string().describe("URL of the image to upload, path to local file, or base64 encoded image data")
@@ -398,13 +398,13 @@ server.tool(
 );
 ```
 
-### generate-product-description
+### generate_product_description
 
 Generates a product description using AI.
 
 ```typescript
 server.prompt(
-  "generate-product-description",
+  "generate_product_description",
   {
     productName: z.string(),
     category: z.string(),
@@ -417,13 +417,13 @@ server.prompt(
 );
 ```
 
-### generate-and-upload-image
+### generate_and_upload_image
 
 Generates an image with AI and uploads it to Printify.
 
 ```typescript
 server.tool(
-  "generate-and-upload-image",
+  "generate_and_upload_image",
   {
     prompt: z.string().describe("Text prompt for image generation"),
     fileName: z.string().describe("File name for the uploaded image"),
