@@ -83,7 +83,7 @@ This MCP server provides the following capabilities:
 
 ```bash
 # Clone the repository
-git clone https://github.com/tsavo/printify-mcp.git
+git clone https://github.com/rlorenzo/printify-mcp.git
 cd printify-mcp
 
 # Install dependencies
@@ -216,7 +216,7 @@ does not start a server, touch your stdio, or load a `.env`, so you choose the
 transport and how your configuration is loaded:
 
 ```js
-import { createPrintifyMcpServer } from '@tsavo/printify-mcp';
+import { createPrintifyMcpServer } from '@rlorenzo/printify-mcp';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 
 const { server, initialize } = createPrintifyMcpServer({
@@ -247,7 +247,7 @@ There are three ways to use this MCP server with Claude Desktop:
 1. Install the package globally:
 
    ```bash
-   npm install -g @tsavo/printify-mcp
+   npm install -g @rlorenzo/printify-mcp
    ```
 
 2. Configure your environment variables using either a `.env` file in your current directory or system environment variables as described in the [Configuration](#configuration) section.
@@ -283,8 +283,19 @@ If you don't want to install the package globally, you can use npx:
    - Enter a name for the server (e.g., "Printify MCP")
    - Select "Command" as the transport type
    - Enter `npx` as the command
-   - Enter `@tsavo/printify-mcp` as the arguments
+   - Enter `@rlorenzo/printify-mcp` as the arguments
    - Click "Add Server"
+
+### Checking your version
+
+Every tagged release is published to npm with provenance and listed on the
+[GitHub Releases page](https://github.com/rlorenzo/printify-mcp/releases).
+The server reports its package version during the MCP `initialize` handshake,
+so your client shows exactly what is running.
+
+- `npx @rlorenzo/printify-mcp` fetches the latest release each time it starts.
+- Global installs stay pinned; run `npm update -g @rlorenzo/printify-mcp` to upgrade.
+- `npm view @rlorenzo/printify-mcp version` prints the newest published version.
 
 ### Option 3: Use Docker (Recommended for Isolation)
 
@@ -326,14 +337,14 @@ If you prefer to run the server in a Docker container, you have two options:
      -e PRINTIFY_API_KEY=your_printify_api_key \
      -e PRINTIFY_SHOP_ID=your_shop_id_optional \
      -v $(pwd)/temp:/app/temp \
-     tsavo/printify-mcp:latest
+     rlorenzo/printify-mcp:latest
 
    # For Windows Command Prompt:
    docker run -it --name printify-mcp ^
      -e PRINTIFY_API_KEY=your_printify_api_key ^
      -e PRINTIFY_SHOP_ID=your_shop_id_optional ^
      -v %cd%/temp:/app/temp ^
-     tsavo/printify-mcp:latest
+     rlorenzo/printify-mcp:latest
    ```
 
    **Note:** If you want to use the image generation features (generate_and_upload_image tool), add the Replicate API token:
@@ -355,13 +366,13 @@ If you prefer to run the server in a Docker container, you have two options:
    docker run -it --name printify-mcp \
      -v $(pwd)/.env:/app/.env:ro \
      -v $(pwd)/temp:/app/temp \
-     tsavo/printify-mcp:latest
+     rlorenzo/printify-mcp:latest
 
    # For Windows PowerShell:
-   docker run -it --name printify-mcp -v ${PWD}/.env:/app/.env:ro -v ${PWD}/temp:/app/temp tsavo/printify-mcp:latest
+   docker run -it --name printify-mcp -v ${PWD}/.env:/app/.env:ro -v ${PWD}/temp:/app/temp rlorenzo/printify-mcp:latest
 
    # For Windows Command Prompt:
-   docker run -it --name printify-mcp -v %cd%/.env:/app/.env:ro -v %cd%/temp:/app/temp tsavo/printify-mcp:latest
+   docker run -it --name printify-mcp -v %cd%/.env:/app/.env:ro -v %cd%/temp:/app/temp rlorenzo/printify-mcp:latest
    ```
 
 6. Configure Claude Desktop:
@@ -381,7 +392,7 @@ If you prefer to run the server in a Docker container, you have two options:
 2. Clone this repository to your local machine:
 
    ```bash
-   git clone https://github.com/tsavo/printify-mcp.git
+   git clone https://github.com/rlorenzo/printify-mcp.git
    cd printify-mcp
    ```
 
@@ -450,7 +461,7 @@ If you prefer to work with the source code directly without Docker:
 1. Clone this repository to your local machine:
 
    ```bash
-   git clone https://github.com/tsavo/printify-mcp.git
+   git clone https://github.com/rlorenzo/printify-mcp.git
    cd printify-mcp
    ```
 
@@ -914,7 +925,7 @@ You can publish the Docker image to Docker Hub or any other container registry t
 1. **Build the Docker image**:
 
    ```bash
-   docker build -t tsavo/printify-mcp:latest .
+   docker build -t rlorenzo/printify-mcp:latest .
    ```
 
 2. **Log in to Docker Hub**:
@@ -926,7 +937,7 @@ You can publish the Docker image to Docker Hub or any other container registry t
 3. **Push the image to Docker Hub**:
 
    ```bash
-   docker push tsavo/printify-mcp:latest
+   docker push rlorenzo/printify-mcp:latest
    ```
 
 ### Using the Docker Image Without Node.js
@@ -950,7 +961,7 @@ Users can run the Printify MCP server without installing Node.js by using the Do
      -e PRINTIFY_API_KEY=their_printify_api_key \
      -e PRINTIFY_SHOP_ID=their_shop_id_optional \
      -v $(pwd)/temp:/app/temp \
-     tsavo/printify-mcp:latest
+     rlorenzo/printify-mcp:latest
    ```
 
    **Note:** If they want to use the image generation features (generate_and_upload_image tool), add the Replicate API token:
@@ -983,7 +994,7 @@ Users can run the Printify MCP server without installing Node.js by using the Do
    docker run -it --name printify-mcp \
      -v $(pwd)/.env:/app/.env:ro \
      -v $(pwd)/temp:/app/temp \
-     tsavo/printify-mcp:latest
+     rlorenzo/printify-mcp:latest
    ```
 
 4. **Configure Claude Desktop**:
@@ -1077,7 +1088,7 @@ If you're using the Docker setup and encounter issues:
 2. **Environment variables not working**: If using a .env file, make sure it's in the same directory as your docker-compose.yml file or the directory where you run the `docker run` command. If setting environment variables directly with `-e`, check for typos in variable names
 3. **Permission issues with temp directory**: The temp directory is mounted as a volume, ensure it has the correct permissions
 4. **Connection issues from Claude**: Make sure the Docker container is running with `docker ps` and that you've configured Claude Desktop correctly
-5. **Image not found**: If using the Docker Hub image directly, make sure you've pulled it with `docker pull tsavo/printify-mcp:latest`
+5. **Image not found**: If using the Docker Hub image directly, make sure you've pulled it with `docker pull rlorenzo/printify-mcp:latest`
 
 To restart the Docker container when using docker-compose:
 
@@ -1091,19 +1102,19 @@ To restart the Docker container when using docker run:
 ```bash
 docker stop printify-mcp
 docker rm printify-mcp
-docker run -it --name printify-mcp -v $(pwd)/.env:/app/.env:ro -v $(pwd)/temp:/app/temp tsavo/printify-mcp:latest
+docker run -it --name printify-mcp -v $(pwd)/.env:/app/.env:ro -v $(pwd)/temp:/app/temp rlorenzo/printify-mcp:latest
 ```
 
 For Windows users using PowerShell with the Docker image directly:
 
 ```powershell
-docker run -it --name printify-mcp -v ${PWD}/.env:/app/.env:ro -v ${PWD}/temp:/app/temp tsavo/printify-mcp:latest
+docker run -it --name printify-mcp -v ${PWD}/.env:/app/.env:ro -v ${PWD}/temp:/app/temp rlorenzo/printify-mcp:latest
 ```
 
 For Windows users using Command Prompt with the Docker image directly:
 
 ```cmd
-docker run -it --name printify-mcp -v %cd%/.env:/app/.env:ro -v %cd%/temp:/app/temp tsavo/printify-mcp:latest
+docker run -it --name printify-mcp -v %cd%/.env:/app/.env:ro -v %cd%/temp:/app/temp rlorenzo/printify-mcp:latest
 ```
 
 ### Debugging

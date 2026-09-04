@@ -10,6 +10,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { registerTools, type PrintifyContext } from "./tools.js";
 import { initializeClients } from "./bootstrap.js";
 import dotenv from "dotenv";
+import { VERSION } from "./version.js";
 
 // Load environment variables from .env file
 dotenv.config();
@@ -17,7 +18,7 @@ dotenv.config();
 // Create an MCP server
 const server = new McpServer({
   name: "Printify-MCP",
-  version: "1.0.0"
+  version: VERSION
 });
 
 // Shared with the tool handlers; populated by the async initialization below.
