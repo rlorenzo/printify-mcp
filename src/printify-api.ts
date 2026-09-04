@@ -3,12 +3,22 @@ import * as path from 'path';
 import Printify from 'printify-sdk-js';
 import sharp from 'sharp';
 import { describeError } from './utils/error-handler.js';
+import { applyOutputFormat, mimeTypeFor } from './services/image-format.js';
 
 // Shop interface
 export interface PrintifyShop {
   id: number;
   title: string;
   sales_channel: string;
+}
+
+/** The selected shop, or the error every shop-scoped service reports without one. */
+export function requireShop(client: PrintifyAPI): PrintifyShop {
+  const shop = client.getCurrentShop();
+  if (!shop) {
+    throw new Error('No shop is currently selected. Use the list-shops and switch-shop tools to select a shop.');
+  }
+  return shop;
 }
 
 // Printify API client
@@ -195,12 +205,7 @@ export class PrintifyAPI {
     console.error(`Printify API client initializing (API token ${apiToken ? 'present' : 'MISSING'})`);
 
     // Initialize the Printify SDK client
-    this.client = new Printify({
-      accessToken: apiToken,
-      shopId: shopId || undefined, // Only pass shopId if it's provided
-      enableLogging: false,
-      timeout: 60000
-    });
+    this.client = this.buildClient(shopId);
 
     // Set the shop ID if provided
     if (shopId) {
@@ -209,6 +214,16 @@ export class PrintifyAPI {
     } else {
       console.error('No shop ID provided. Will attempt to select the first available shop during initialization.');
     }
+  }
+
+  /** The SDK binds a shop at construction, so every shop change needs a new client. */
+  private buildClient(shopId?: string | null) {
+    return new Printify({
+      accessToken: this.apiToken,
+      shopId: shopId || undefined, // Only pass shopId if it's provided
+      enableLogging: false,
+      timeout: 60000
+    });
   }
 
   // Initialize the API client by fetching shops
@@ -231,12 +246,7 @@ export class PrintifyAPI {
             console.error(`Setting default shop ID to: ${this.shopId}`);
 
             // Create a new client with the shop ID
-            this.client = new Printify({
-              accessToken: this.apiToken,
-              shopId: this.shopId,
-              enableLogging: false,
-              timeout: 60000
-            });
+            this.client = this.buildClient(this.shopId);
           }
         } else {
           console.warn('No shops found in the Printify API response');
@@ -283,14 +293,8 @@ export class PrintifyAPI {
     console.error(`Setting shop ID to: ${shopId}`);
     this.shopId = shopId;
 
-    // Create a new client instance with the new shop ID
     // The SDK requires creating a new client when changing shop ID
-    this.client = new Printify({
-      accessToken: this.apiToken,
-      shopId: shopId,
-      enableLogging: false,
-      timeout: 60000
-    });
+    this.client = this.buildClient(shopId);
 
     console.error(`Shop ID set to: ${shopId} (created new client instance)`);
   }
@@ -668,24 +672,11 @@ export class PrintifyAPI {
           // Process the image with Sharp
           console.error('Processing image with Sharp before uploading...');
 
-          // Use Sharp directly
-          const sharpInstance = sharp(filePath);
-          const outputFormat = path.extname(filePath).toLowerCase() === '.jpg' ||
-                              path.extname(filePath).toLowerCase() === '.jpeg' ? 'jpeg' : 'png';
-
-          // Convert to the appropriate format
-          if (outputFormat === 'jpeg') {
-            sharpInstance.jpeg({ quality: 100 });
-          } else {
-            sharpInstance.png({ quality: 100 });
-          }
-
-          // Get the buffer
-          const buffer = await sharpInstance.toBuffer();
+          const ext = path.extname(filePath).toLowerCase();
+          const outputFormat = ext === '.jpg' || ext === '.jpeg' ? 'jpeg' : 'png';
+          const buffer = await applyOutputFormat(sharp(filePath), outputFormat).toBuffer();
           console.error(`Image processed successfully: ${buffer.length} bytes`);
-
-          // Determine the MIME type
-          const mimeType = outputFormat === 'jpeg' ? 'image/jpeg' : 'image/png';
+          const mimeType = mimeTypeFor(outputFormat);
 
           // Convert to base64
           const base64Data = buffer.toString('base64');

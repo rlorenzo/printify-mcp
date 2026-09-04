@@ -14,6 +14,18 @@ import { DefaultsManager } from "./model-manager.js";
 import { mergeGenerationOptions } from "./generation-options.js";
 import { stageOnImgbb, requiresImgbb, hasImgbbKey } from "./services/imgbb.js";
 import { saveDebugCopy } from "./services/image-format.js";
+import { generateImage } from "./services/image-generator.js";
+import { formatSuccessResponse } from "./utils/error-handler.js";
+import * as shops from "./services/printify-shops.js";
+import * as products from "./services/printify-products.js";
+import * as blueprints from "./services/printify-blueprints.js";
+import { uploadImageToPrintify, determineImageSourceType } from "./services/printify-uploader.js";
+import axios from "axios";
+import FormData from "form-data";
+import * as fs from "fs";
+import * as path from "path";
+import { readFile } from "fs/promises";
+import { fileURLToPath } from "url";
 
 /**
  * Clients shared with the tool handlers.
@@ -38,6 +50,18 @@ export interface PrintifyContext {
 }
 
 type ToolResult = { content: any[]; isError?: boolean };
+
+/** An error inside the MCP result envelope, so it reaches the model rather than the transport. */
+function toolError(text: string): ToolResult {
+  return { content: [{ type: "text", text }], isError: true };
+}
+
+/** The defaults as markdown table rows, shared by get_defaults and set_default. */
+function formatDefaultsTable(allDefaults: Record<string, any>): string {
+  return Object.entries(allDefaults)
+    .map(([key, val]) => `| ${key} | ${typeof val === 'object' ? JSON.stringify(val) : val} |`)
+    .join('\n');
+}
 
 /**
  * Print areas, in either of the two shapes the API layer accepts.
@@ -80,13 +104,7 @@ function printifyReady(ctx: PrintifyContext): ctx is ReadyContext {
  * instead of surfacing as a transport error.
  */
 function printifyNotReady(): ToolResult {
-  return {
-    content: [{
-      type: "text",
-      text: "Printify API client is not initialized. Set the PRINTIFY_API_KEY environment variable, or pass printifyApiKey to createPrintifyMcpServer()."
-    }],
-    isError: true
-  };
+  return toolError("Printify API client is not initialized. Set the PRINTIFY_API_KEY environment variable, or pass printifyApiKey to createPrintifyMcpServer().");
 }
 
 /**
@@ -95,13 +113,7 @@ function printifyNotReady(): ToolResult {
  * state, so they must not be gated on it.
  */
 function replicateNotReady(): ToolResult {
-  return {
-    content: [{
-      type: "text",
-      text: "Replicate API client is not initialized, so image generation is unavailable. Set the REPLICATE_API_TOKEN environment variable, or pass replicateApiToken to createPrintifyMcpServer()."
-    }],
-    isError: true
-  };
+  return toolError("Replicate API client is not initialized, so image generation is unavailable. Set the REPLICATE_API_TOKEN environment variable, or pass replicateApiToken to createPrintifyMcpServer().");
 }
 
 /**
@@ -193,13 +205,9 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
     "get_printify_status",
     {},
     async (): Promise<{ content: any[], isError?: boolean }> => {
-      // Import the printify shops service
-      const { getPrintifyStatus } = await import('./services/printify-shops.js');
-
       if (!printifyReady(ctx)) return printifyNotReady();
 
-      // Call the service
-      const result = await getPrintifyStatus(ctx.printifyClient);
+      const result = await shops.getPrintifyStatus(ctx.printifyClient);
 
       return unwrap(result);
     }
@@ -210,13 +218,9 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
     "list_shops",
     {},
     async (): Promise<{ content: any[], isError?: boolean }> => {
-      // Import the printify shops service
-      const { listPrintifyShops } = await import('./services/printify-shops.js');
-
       if (!printifyReady(ctx)) return printifyNotReady();
 
-      // Call the service
-      const result = await listPrintifyShops(ctx.printifyClient);
+      const result = await shops.listPrintifyShops(ctx.printifyClient);
 
       return unwrap(result);
     }
@@ -229,13 +233,9 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       shopId: z.string().describe("The ID of the shop to switch to")
     },
     async ({ shopId }): Promise<{ content: any[], isError?: boolean }> => {
-      // Import the printify shops service
-      const { switchPrintifyShop } = await import('./services/printify-shops.js');
-
       if (!printifyReady(ctx)) return printifyNotReady();
 
-      // Call the service
-      const result = await switchPrintifyShop(ctx.printifyClient, shopId);
+      const result = await shops.switchPrintifyShop(ctx.printifyClient, shopId);
 
       return unwrap(result);
     }
@@ -251,13 +251,9 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       limit: z.number().optional().default(10).describe("Number of products per page")
     },
     async ({ page, limit }): Promise<{ content: any[], isError?: boolean }> => {
-      // Import the printify products service
-      const { listProducts } = await import('./services/printify-products.js');
-
       if (!printifyReady(ctx)) return printifyNotReady();
 
-      // Call the service
-      const result = await listProducts(ctx.printifyClient, { page, limit });
+      const result = await products.listProducts(ctx.printifyClient, { page, limit });
 
       return unwrap(result);
     }
@@ -270,13 +266,9 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       productId: z.string().describe("Product ID")
     },
     async ({ productId }): Promise<{ content: any[], isError?: boolean }> => {
-      // Import the printify products service
-      const { getProduct } = await import('./services/printify-products.js');
-
       if (!printifyReady(ctx)) return printifyNotReady();
 
-      // Call the service
-      const result = await getProduct(ctx.printifyClient, productId);
+      const result = await products.getProduct(ctx.printifyClient, productId);
 
       return unwrap(result);
     }
@@ -299,13 +291,9 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       tags: z.array(z.string()).optional().describe("Tags for the product")
     },
     async ({ title, description, blueprintId, printProviderId, variants, printAreas, tags }): Promise<{ content: any[], isError?: boolean }> => {
-      // Import the printify products service
-      const { createProduct } = await import('./services/printify-products.js');
-
       if (!printifyReady(ctx)) return printifyNotReady();
 
-      // Call the service
-      const result = await createProduct(ctx.printifyClient, {
+      const result = await products.createProduct(ctx.printifyClient, {
         title,
         description,
         blueprintId,
@@ -335,13 +323,9 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       tags: z.array(z.string()).optional().describe("Tags for the product")
     },
     async ({ productId, title, description, variants, printAreas, tags }): Promise<{ content: any[], isError?: boolean }> => {
-      // Import the printify products service
-      const { updateProduct } = await import('./services/printify-products.js');
-
       if (!printifyReady(ctx)) return printifyNotReady();
 
-      // Call the service
-      const result = await updateProduct(ctx.printifyClient, productId, {
+      const result = await products.updateProduct(ctx.printifyClient, productId, {
         title,
         description,
         variants,
@@ -360,13 +344,9 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       productId: z.string().describe("Product ID")
     },
     async ({ productId }): Promise<{ content: any[], isError?: boolean }> => {
-      // Import the printify products service
-      const { deleteProduct } = await import('./services/printify-products.js');
-
       if (!printifyReady(ctx)) return printifyNotReady();
 
-      // Call the service
-      const result = await deleteProduct(ctx.printifyClient, productId);
+      const result = await products.deleteProduct(ctx.printifyClient, productId);
 
       return unwrap(result);
     }
@@ -386,13 +366,9 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       }).optional().describe("Publish details")
     },
     async ({ productId, publishDetails }): Promise<{ content: any[], isError?: boolean }> => {
-      // Import the printify products service
-      const { publishProduct } = await import('./services/printify-products.js');
-
       if (!printifyReady(ctx)) return printifyNotReady();
 
-      // Call the service
-      const result = await publishProduct(ctx.printifyClient, productId, publishDetails);
+      const result = await products.publishProduct(ctx.printifyClient, productId, publishDetails);
 
       return unwrap(result);
     }
@@ -406,13 +382,9 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       limit: z.number().optional().default(10).describe("Number of blueprints per page (max 100)")
     },
     async ({ page, limit }): Promise<{ content: any[], isError?: boolean }> => {
-      // Import the printify blueprints service
-      const { getBlueprints } = await import('./services/printify-blueprints.js');
-
       if (!printifyReady(ctx)) return printifyNotReady();
 
-      // Call the service
-      const result = await getBlueprints(ctx.printifyClient, { page, limit });
+      const result = await blueprints.getBlueprints(ctx.printifyClient, { page, limit });
 
       return unwrap(result);
     }
@@ -425,13 +397,9 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       blueprintId: z.string().describe("Blueprint ID")
     },
     async ({ blueprintId }): Promise<{ content: any[], isError?: boolean }> => {
-      // Import the printify blueprints service
-      const { getBlueprint } = await import('./services/printify-blueprints.js');
-
       if (!printifyReady(ctx)) return printifyNotReady();
 
-      // Call the service
-      const result = await getBlueprint(ctx.printifyClient, blueprintId);
+      const result = await blueprints.getBlueprint(ctx.printifyClient, blueprintId);
 
       return unwrap(result);
     }
@@ -444,13 +412,9 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       blueprintId: z.string().describe("Blueprint ID")
     },
     async ({ blueprintId }): Promise<{ content: any[], isError?: boolean }> => {
-      // Import the printify blueprints service
-      const { getPrintProviders } = await import('./services/printify-blueprints.js');
-
       if (!printifyReady(ctx)) return printifyNotReady();
 
-      // Call the service
-      const result = await getPrintProviders(ctx.printifyClient, blueprintId);
+      const result = await blueprints.getPrintProviders(ctx.printifyClient, blueprintId);
 
       return unwrap(result);
     }
@@ -466,13 +430,9 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       limit: z.number().optional().default(50).describe("Number of variants per page (max 100)")
     },
     async ({ blueprintId, printProviderId, page, limit }): Promise<{ content: any[], isError?: boolean }> => {
-      // Import the printify blueprints service
-      const { getVariants } = await import('./services/printify-blueprints.js');
-
       if (!printifyReady(ctx)) return printifyNotReady();
 
-      // Call the service
-      const result = await getVariants(ctx.printifyClient, blueprintId, printProviderId, { page, limit });
+      const result = await blueprints.getVariants(ctx.printifyClient, blueprintId, printProviderId, { page, limit });
 
       return unwrap(result);
     }
@@ -486,9 +446,6 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       url: z.string().describe("URL of the image to upload, path to local file, or base64 encoded image data")
     },
     async ({ fileName, url }): Promise<{ content: any[], isError?: boolean }> => {
-      // Import the printify uploader service
-      const { uploadImageToPrintify, determineImageSourceType } = await import('./services/printify-uploader.js');
-
       if (!printifyReady(ctx)) return printifyNotReady();
 
       // Log the attempt with limited information for privacy
@@ -499,7 +456,6 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
 
       console.error(`Attempting to upload image: ${fileName} from ${sourceType} source: ${sourcePreview}`);
 
-      // Call the service
       const result = await uploadImageToPrintify(ctx.printifyClient, fileName, url);
 
       return unwrap(result);
@@ -535,10 +491,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
           }
         }).join('\n');
 
-        // Format all current defaults as a table
-        const defaultsTable = Object.entries(allDefaults)
-          .map(([key, val]) => `| ${key} | ${typeof val === 'object' ? JSON.stringify(val) : val} |`)
-          .join('\n');
+        const defaultsTable = formatDefaultsTable(allDefaults);
 
         return {
           content: [{
@@ -562,13 +515,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
           }]
         };
       } catch (error: any) {
-        return {
-          content: [{
-            type: "text",
-            text: `Error getting defaults: ${error.message}`
-          }],
-          isError: true
-        };
+        return toolError(`Error getting defaults: ${error.message}`);
       }
     }
   );
@@ -609,10 +556,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
           }
         }
 
-        // Format all current defaults as a table
-        const defaultsTable = Object.entries(allDefaults)
-          .map(([key, val]) => `| ${key} | ${typeof val === 'object' ? JSON.stringify(val) : val} |`)
-          .join('\n');
+        const defaultsTable = formatDefaultsTable(allDefaults);
 
         return {
           content: [{
@@ -628,13 +572,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
           }]
         };
       } catch (error: any) {
-        return {
-          content: [{
-            type: "text",
-            text: `Error setting default: ${error.message}`
-          }],
-          isError: true
-        };
+        return toolError(`Error setting default: ${error.message}`);
       }
     }
   );
@@ -657,21 +595,9 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
     },
     async ({ topic }) => {
       try {
-        // Import required modules
-        const fs = await import('fs');
-        const path = await import('path');
-        const { promisify } = await import('util');
-        const readFile = promisify(fs.readFile);
-
-        // Convert topic to file name format
-        const fileName = `${topic}.md`;
-
-        // Get the directory of the current file using import.meta.url
-        // This works regardless of where the process is started from
-        const { fileURLToPath } = await import('url');
-        const currentFilePath = fileURLToPath(import.meta.url);
-        const currentDirPath = path.dirname(currentFilePath);
-        const filePath = path.join(currentDirPath, 'docs', fileName);
+        // Resolved from this module's own location, so it works regardless of
+        // where the process is started from.
+        const filePath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'docs', `${topic}.md`);
 
         // Read the documentation file
         let documentation;
@@ -680,13 +606,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
         } catch (readError: any) {
           console.error(`Failed to read docs for "${topic}" at ${filePath}:`, readError);
 
-          return {
-            content: [{
-              type: "text",
-              text: `Documentation for topic "${topic}" not found. Available topics are: product_creation, blueprints, print_providers, variants, images, publishing, image_generation`
-            }],
-            isError: true
-          };
+          return toolError(`Documentation for topic "${topic}" not found. Available topics are: product_creation, blueprints, print_providers, variants, images, publishing, image_generation`);
         }
 
         return {
@@ -696,13 +616,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
           }]
         };
       } catch (error: any) {
-        return {
-          content: [{
-            type: "text",
-            text: `Error retrieving documentation: ${error.message}`
-          }],
-          isError: true
-        };
+        return toolError(`Error retrieving documentation: ${error.message}`);
       }
     }
   );
@@ -760,10 +674,6 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       seed, numInferenceSteps, guidanceScale, negativePrompt, promptUpsampling, outputQuality,
       raw, imagePromptStrength
     }): Promise<{ content: any[], isError?: boolean }> => {
-      // Import the services
-      const { generateImage } = await import('./services/image-generator.js');
-      const { formatSuccessResponse } = await import('./utils/error-handler.js');
-
       // Check if clients are initialized
       if (!ctx.replicateClient) return replicateNotReady();
 
@@ -776,28 +686,16 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       // Fail before generating: an Ultra image that cannot be staged is wasted
       // spend.
       if (requiresImgbb(modelToUse) && !hasImgbbKey(process.env.IMGBB_API_KEY)) {
-        return {
-          content: [{
-            type: "text",
-            text: `ERROR: The Flux 1.1 Pro Ultra model generates high-resolution images that are too large for direct base64 upload.\n\n` +
+        return toolError(`ERROR: The Flux 1.1 Pro Ultra model generates high-resolution images that are too large for direct base64 upload.\n\n` +
                   `You MUST set the IMGBB_API_KEY environment variable when using this model.\n\n` +
                   `Get a free API key from https://api.imgbb.com/ and add it to your .env file:\n` +
-                  `IMGBB_API_KEY=your_api_key_here`
-          }],
-          isError: true
-        };
+                  `IMGBB_API_KEY=your_api_key_here`);
       }
 
       // Check if a shop is selected
       const currentShop = ctx.printifyClient.getCurrentShop();
       if (!currentShop) {
-        return {
-          content: [{
-            type: "text",
-            text: "No shop is currently selected. Use the list_shops and switch_shop tools to select a shop."
-          }],
-          isError: true
-        };
+        return toolError("No shop is currently selected. Use the list_shops and switch_shop tools to select a shop.");
       }
 
       console.error(`Starting generate_and_upload_image with prompt: ${prompt}`);
@@ -830,13 +728,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
 
       // Make sure we have valid image data
       if (!imageBuffer) {
-        return {
-          content: [{
-            type: "text",
-            text: "Failed to get valid image data from the image generator."
-          }],
-          isError: true
-        };
+        return toolError("Failed to get valid image data from the image generator.");
       }
 
       // STEP 2: Upload the processed image to Printify
@@ -849,37 +741,15 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       const uploadDetails = [
         `Preparing to upload image to Printify:`,
         `- File name: ${finalFileName}`,
-        `- Image buffer size: ${imageBuffer?.length || 0} bytes`,
+        `- Image buffer size: ${imageBuffer.length} bytes`,
         `- MIME type: ${mimeType}`,
         `- Model used: ${usingModel}`
       ].join('\n');
 
       await saveDebugCopy(imageBuffer, finalFileName);
 
-      if (!imageBuffer || !finalFileName) {
-        return {
-          content: [{
-            type: "text",
-            text: `Error: No ${imageBuffer ? 'filename' : 'image data'} available for upload`
-          }],
-          isError: true
-        };
-      }
-
-      // STEP 1: Import required modules
-      let axios;
-      let FormData;
-      try {
-        axios = (await import('axios')).default;
-        FormData = (await import('form-data')).default;
-      } catch (importError: any) {
-        return {
-          content: [{
-            type: "text",
-            text: `Error importing required modules: ${importError.message || String(importError)}`
-          }],
-          isError: true
-        };
+      if (!finalFileName) {
+        return toolError(`Error: No filename available for upload`);
       }
 
       // STEP 2: Stage on ImgBB when required or available.
@@ -892,36 +762,19 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       const uploadMethod = staged.method;
       const imageUrl = staged.method === 'imgbb' ? staged.imageUrl : undefined;
 
-      // STEP 4/5: Use the configured Printify client.
+      // STEP 4/5: Use the configured Printify client (guarded above).
       // Constructing a second SDK client from process.env here would ignore a key
       // passed to createPrintifyMcpServer(), and fall back to an empty token.
-      const printifyForUpload = ctx.printifyClient;
-      if (!printifyForUpload) {
-        return {
-          content: [{
-            type: "text",
-            text: `Printify client is not initialized. Set PRINTIFY_API_KEY, or pass printifyApiKey to createPrintifyMcpServer().` +
-                  (imageUrl ? `\n\nThe generated image is available at: ${imageUrl}` : '')
-          }],
-          isError: true
-        };
-      }
-      console.error(`Uploading via configured Printify client (shop ${printifyForUpload.getCurrentShopId() || 'unset'})`);
+      console.error(`Uploading via configured Printify client (shop ${ctx.printifyClient.getCurrentShopId() || 'unset'})`);
 
       // STEP 6: Upload the image to Printify
       let image: any;
       try {
-        image = await uploadGenerated(printifyForUpload, finalFileName, imageBuffer, mimeType, uploadMethod, imageUrl);
+        image = await uploadGenerated(ctx.printifyClient, finalFileName, imageBuffer, mimeType, uploadMethod, imageUrl);
       } catch (uploadError: any) {
-        return {
-          content: [{
-            type: "text",
-            text: `Error uploading to Printify: ${uploadError.message || String(uploadError)}\n\n` +
+        return toolError(`Error uploading to Printify: ${uploadError.message || String(uploadError)}\n\n` +
                   `Upload method: ${uploadMethod}${imageUrl ? `\nImgBB URL: ${imageUrl}` : ''}\n\n` +
-                  `Response data: ${JSON.stringify(uploadError.response?.data || {}, null, 2)}`
-          }],
-          isError: true
-        };
+                  `Response data: ${JSON.stringify(uploadError.response?.data || {}, null, 2)}`);
       }
 
       // STEP 7: Return success response
@@ -948,8 +801,6 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       ) as { content: any[], isError?: boolean };
 
       return response;
-
-
     }
   );
 
@@ -967,12 +818,6 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       seed, numInferenceSteps, guidanceScale, negativePrompt, promptUpsampling, outputQuality,
       raw, imagePromptStrength
     }): Promise<{ content: any[], isError?: boolean }> => {
-      // Import the services
-      const { generateImage } = await import('./services/image-generator.js');
-      const { formatSuccessResponse } = await import('./utils/error-handler.js');
-      const fs = await import('fs');
-      const path = await import('path');
-
       // Check if Replicate client is initialized
       if (!ctx.replicateClient) return replicateNotReady();
 
@@ -1015,13 +860,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
 
       // Make sure we have valid image data
       if (!imageBuffer) {
-        return {
-          content: [{
-            type: "text",
-            text: "Failed to get valid image data from the image generator."
-          }],
-          isError: true
-        };
+        return toolError("Failed to get valid image data from the image generator.");
       }
 
       try {
@@ -1031,12 +870,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
           fs.mkdirSync(outputDir, { recursive: true });
         }
 
-        // Save the buffer directly to the specified output path
-        if (imageBuffer) {
-          fs.writeFileSync(outputPath, imageBuffer);
-        } else {
-          throw new Error('No image data available to save');
-        }
+        fs.writeFileSync(outputPath, imageBuffer);
 
         // Return success response
         const response = formatSuccessResponse(
@@ -1046,7 +880,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
             Model: usingModel.split('/')[1],
             'Output Path': outputPath,
             'File Name': finalFileName,
-            'File Size': `${imageBuffer ? imageBuffer.length : 0} bytes`,
+            'File Size': `${imageBuffer.length} bytes`,
             'Dimensions': dimensions || `${width}x${height}`,
             'Format': outputFormat || 'png',
             'Generation Parameters': {
@@ -1069,13 +903,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
 
         return response;
       } catch (error: any) {
-        return {
-          content: [{
-            type: "text",
-            text: `Error saving image to ${outputPath}: ${error.message || String(error)}`
-          }],
-          isError: true
-        };
+        return toolError(`Error saving image to ${outputPath}: ${error.message || String(error)}`);
       }
     }
   );

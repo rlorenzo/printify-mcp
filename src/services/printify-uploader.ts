@@ -2,7 +2,7 @@
  * Printify upload service for Printify MCP
  */
 // No need for fs and path imports
-import { PrintifyAPI } from '../printify-api.js';
+import { PrintifyAPI, requireShop } from '../printify-api.js';
 import { describeError, formatErrorResponse, formatSuccessResponse } from '../utils/error-handler.js';
 import { getFileInfo, validateFilePath } from '../utils/file-utils.js';
 
@@ -195,11 +195,7 @@ export async function uploadImageToPrintify(
   source: string
 ) {
   try {
-    // Validate shop is selected
-    const currentShop = printifyClient.getCurrentShop();
-    if (!currentShop) {
-      throw new Error('No shop is currently selected. Use the list-shops and switch-shop tools to select a shop.');
-    }
+    requireShop(printifyClient);
 
     // Determine the source type
     const sourceType = determineImageSourceType(source);
