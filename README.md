@@ -336,7 +336,7 @@ If you prefer to run the server in a Docker container, you have two options:
      tsavo/printify-mcp:latest
    ```
 
-   **Note:** If you want to use the image generation features (generate-and-upload-image tool), add the Replicate API token:
+   **Note:** If you want to use the image generation features (generate_and_upload_image tool), add the Replicate API token:
 
    ```bash
    -e REPLICATE_API_TOKEN=your_replicate_api_token \
@@ -504,7 +504,7 @@ In a conversation with Claude, you can test if the server is working by asking C
 Can you check the status of my Printify connection?
 ```
 
-Claude should use the `get-printify-status` tool to check the connection status. You can also ask Claude to list your Printify shops using the `list-shops` tool.
+Claude should use the `get_printify_status` tool to check the connection status. You can also ask Claude to list your Printify shops using the `list_shops` tool.
 
 If you encounter any issues:
 
@@ -517,15 +517,15 @@ If you encounter any issues:
 
 ### Shop Management
 
-#### `get-printify-status`
+#### `get_printify_status`
 
 Get the current status of the Printify API client, including connection status and current shop.
 
-#### `list-shops`
+#### `list_shops`
 
 List all available shops in your Printify account. The currently selected shop is marked with an arrow (→).
 
-#### `switch-shop`
+#### `switch_shop`
 
 Switch to a different shop for subsequent API calls.
 
@@ -535,7 +535,7 @@ Parameters:
 
 ### Product Tools
 
-#### `list-products`
+#### `list_products`
 
 List products in your Printify shop.
 
@@ -544,7 +544,7 @@ Parameters:
 - `page` (number, optional): Page number (default: 1)
 - `limit` (number, optional): Number of products per page (default: 10)
 
-#### `get-product`
+#### `get_product`
 
 Get details of a specific product.
 
@@ -552,7 +552,7 @@ Parameters:
 
 - `productId` (string): Product ID
 
-#### `create-product`
+#### `create_product`
 
 Create a new product in your Printify shop.
 
@@ -568,7 +568,7 @@ Parameters:
   applied to every variant. As an array, one entry per variant group
   (`[{ variantIds, placeholders }]`), for different artwork per colorway.
 
-#### `update-product`
+#### `update_product`
 
 Update an existing product in your Printify shop.
 
@@ -588,7 +588,7 @@ Parameters:
   requires reading the product first, so it fails rather than guessing if the
   product cannot be fetched.
 
-#### `delete-product`
+#### `delete_product`
 
 Delete a product from your Printify shop.
 
@@ -596,7 +596,7 @@ Parameters:
 
 - `productId` (string): Product ID
 
-#### `publish-product`
+#### `publish_product`
 
 Publish a product to your connected sales channel.
 
@@ -607,7 +607,7 @@ Parameters:
 
 ### Catalog Tools
 
-#### `get-blueprints`
+#### `get_blueprints`
 
 Get a list of available blueprints from the Printify catalog.
 
@@ -616,7 +616,7 @@ Parameters:
 - `page` (number, optional): Page number (default: 1)
 - `limit` (number, optional): Number of blueprints per page (default: 10)
 
-#### `get-blueprint`
+#### `get_blueprint`
 
 Get details of a specific blueprint.
 
@@ -624,7 +624,7 @@ Parameters:
 
 - `blueprintId` (string): Blueprint ID
 
-#### `get-print-providers`
+#### `get_print_providers`
 
 Get a list of print providers for a specific blueprint.
 
@@ -632,7 +632,7 @@ Parameters:
 
 - `blueprintId` (string): Blueprint ID
 
-#### `get-variants`
+#### `get_variants`
 
 Get a list of variants for a specific blueprint and print provider.
 
@@ -643,7 +643,7 @@ Parameters:
 
 ### Image Tools
 
-#### `generate-and-upload-image`
+#### `generate_and_upload_image`
 
 Generate an image using Replicate's Flux models, process it with Sharp, and upload it to Printify in one operation. This tool combines AI image generation with Printify integration for a seamless workflow.
 
@@ -673,7 +673,7 @@ Parameters:
 
 **Important:** If you want to use the Flux 1.1 Pro Ultra model, you MUST also set the `IMGBB_API_KEY` environment variable. The Ultra model generates high-resolution images that are too large for direct base64 upload to Printify. You can get a free API key from [api.imgbb.com](https://api.imgbb.com).
 
-#### `generate-image`
+#### `generate_image`
 
 Generate an image using Replicate's Flux models and save it to a local file without uploading to Printify. This tool is useful when you want to generate images for other purposes or when you want to review and potentially edit images before uploading them to Printify.
 
@@ -694,9 +694,9 @@ Parameters:
 
 **Note:** This tool requires the `REPLICATE_API_TOKEN` environment variable to be set with a valid Replicate API token. You can get a token from [replicate.com](https://replicate.com).
 
-Unlike the `generate-and-upload-image` tool, this tool doesn't require the ImgBB API key since it saves directly to a local file.
+Unlike the `generate_and_upload_image` tool, this tool doesn't require the ImgBB API key since it saves directly to a local file.
 
-#### `upload-image`
+#### `upload_image`
 
 Upload an image to your Printify account. Supports three types of inputs:
 
@@ -719,7 +719,7 @@ Parameters:
 
 ### Prompts
 
-#### `generate-product-description`
+#### `generate_product_description`
 
 Generate a compelling product description.
 
@@ -797,33 +797,33 @@ Here's a complete example of creating a t-shirt with front and back designs:
 
 ```javascript
 // Step 1: Get blueprints and choose one
-get-blueprints_printify()
+get_blueprints_printify()
 // Selected blueprint ID 12 (Unisex Jersey Short Sleeve Tee)
 
 // Step 2: Get print providers for this blueprint
-get-print-providers_printify({ blueprintId: "12" })
+get_print_providers_printify({ blueprintId: "12" })
 // Selected print provider ID 29 (Monster Digital)
 
 // Step 3: Get variants for this blueprint and print provider
-get-variants_printify({ blueprintId: "12", printProviderId: "29" })
+get_variants_printify({ blueprintId: "12", printProviderId: "29" })
 // Selected variant IDs 18100 (Black / S), 18101 (Black / M), 18102 (Black / L)
 
 // Step 4: Generate and upload front image
-const frontImage = await generate-and-upload-image_printify({
+const frontImage = await generate_and_upload_image_printify({
   prompt: "A futuristic cityscape with neon lights and tall skyscrapers, horizon city logo design",
   fileName: "horizon-city-front"
 })
 // Got image ID: 68032b22ae74bf725ed406ec
 
 // Step 4b: Generate and upload back image
-const backImage = await generate-and-upload-image_printify({
+const backImage = await generate_and_upload_image_printify({
   prompt: "A minimalist 'Horizon City' text logo with futuristic font, suitable for the back of a t-shirt",
   fileName: "horizon-city-back"
 })
 // Got image ID: 68032b377e36fbdd32791027
 
 // Step 5: Create the product
-create-product_printify({
+create_product_printify({
   title: "Horizon City Skyline T-Shirt",
   description: "Step into the future with our Horizon City Skyline T-Shirt. This premium unisex tee features a stunning futuristic cityscape with neon lights and towering skyscrapers on the front, and a sleek minimalist Horizon City logo on the back.",
   blueprintId: 12,
@@ -845,13 +845,13 @@ create-product_printify({
 
 ```javascript
 // List products
-list-products_printify()
+list_products_printify()
 
 // Get details of a specific product
-get-product_printify({ productId: "68032b43a24efbac6502b6f7" })
+get_product_printify({ productId: "68032b43a24efbac6502b6f7" })
 
 // Update a product
-update-product_printify({
+update_product_printify({
   productId: "68032b43a24efbac6502b6f7",
   title: "Updated Horizon City Skyline T-Shirt",
   description: "Updated description...",
@@ -863,7 +863,7 @@ update-product_printify({
 })
 
 // Publish a product to external sales channels
-publish-product_printify({
+publish_product_printify({
   productId: "68032b43a24efbac6502b6f7",
   publishDetails: {
     title: true,
@@ -875,7 +875,7 @@ publish-product_printify({
 })
 
 // Delete a product
-delete-product_printify({ productId: "68032b43a24efbac6502b6f7" })
+delete_product_printify({ productId: "68032b43a24efbac6502b6f7" })
 ```
 
 ## Architecture
@@ -953,7 +953,7 @@ Users can run the Printify MCP server without installing Node.js by using the Do
      tsavo/printify-mcp:latest
    ```
 
-   **Note:** If they want to use the image generation features (generate-and-upload-image tool), add the Replicate API token:
+   **Note:** If they want to use the image generation features (generate_and_upload_image tool), add the Replicate API token:
 
    ```bash
    -e REPLICATE_API_TOKEN=their_replicate_api_token \
