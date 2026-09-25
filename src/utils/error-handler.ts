@@ -103,21 +103,22 @@ export function formatErrorResponse(
   // Get error details
   const errorType = error.constructor.name;
   const errorMessage = error.message || 'Unknown error';
-  const errorStack = error.stack ? error.stack.split('\n').slice(0, 3).join('\n') : 'Not available';
-  
+
   // Format the error message
   let text = `❌ **Error in ${step}**\n\n`;
-  
+
   // Add context information
   text += formatFields(context);
-  
+
   text += `- **Error**: ${errorMessage}\n\n`;
-  
-  // Add detailed diagnostic information
+
+  // Add detailed diagnostic information. The stack trace is deliberately
+  // left out here, same as the API response body below: it reaches the
+  // model verbatim and can carry local file paths and internal call
+  // structure. Callers already log it to stderr via describeError.
   text += `=== DETAILED DIAGNOSTIC INFORMATION ===\n\n`;
   text += `- **Error Type**: ${errorType}\n`;
-  text += `- **Error Stack**: ${errorStack}\n`;
-  
+
   // Add additional context details
   Object.entries(context).forEach(([key, value]) => {
     if (key !== 'Prompt' && key !== 'Model' && key !== 'Error') {

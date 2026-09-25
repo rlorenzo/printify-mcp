@@ -700,9 +700,17 @@ export class PrintifyAPI {
           throw new Error(detailedError, { cause: error });
         }
       } else {
-        // data: URL: the base64 payload is everything after the comma.
-        // Slice after the first comma: base64 payloads never contain commas, but be exact.
-        const base64Content = source.slice(source.indexOf(',') + 1);
+        // data: URL: the base64 payload is everything after the first comma.
+        // A missing comma or an empty payload is malformed input, not a valid
+        // (if unusual) data URL, so reject it here with a clear message
+        // instead of forwarding empty/garbage content to Printify's API.
+        const commaIndex = source.indexOf(',');
+        const base64Content = commaIndex === -1 ? '' : source.slice(commaIndex + 1);
+        if (!base64Content) {
+          throw new Error(
+            `Invalid data URL for ${fileName}: expected "data:<mime>;base64,<payload>" with a non-empty payload after the comma.`
+          );
+        }
         console.error(`Uploading image with base64 data from data URL (length: ${base64Content.length})`);
         return await this.client.uploads.uploadImage({ file_name: fileName, contents: base64Content });
       }

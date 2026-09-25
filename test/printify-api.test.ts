@@ -509,6 +509,21 @@ describe('uploadImage remaining branches', () => {
     await expect(instance.uploadImage('dir.png', scratch)).rejects.toThrow();
   });
 
+  // A `data:` URL with no comma, or an empty payload after it, is malformed
+  // input, not a valid (if unusual) one -- it must not be forwarded to
+  // Printify's API as an empty or garbage `contents` field.
+  it('rejects a data URL with no comma delimiter', async () => {
+    const { instance, uploadImage } = api();
+    await expect(instance.uploadImage('bare.png', 'data:image/png;base64')).rejects.toThrow(/Invalid data URL/);
+    expect(uploadImage).not.toHaveBeenCalled();
+  });
+
+  it('rejects a data URL with an empty payload', async () => {
+    const { instance, uploadImage } = api();
+    await expect(instance.uploadImage('bare.png', 'data:image/png;base64,')).rejects.toThrow(/Invalid data URL/);
+    expect(uploadImage).not.toHaveBeenCalled();
+  });
+
   it('rejects a non-image file', async () => {
     fs.mkdirSync(scratch, { recursive: true });
     const f = path.join(scratch, 'notes.txt');

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { format } from 'node:util';
 import { AxiosError, AxiosHeaders } from 'axios';
-import { describeError } from '../src/utils/error-handler.js';
+import { describeError, formatErrorResponse } from '../src/utils/error-handler.js';
 import { PrintifyAPI } from '../src/printify-api.js';
 
 const TOKEN = 'super-secret-printify-token';
@@ -123,6 +123,21 @@ describe('describeError', () => {
 
   it('names an error that has no message', () => {
     expect(describeError(new Error())).toContain('Error: (no message)');
+  });
+});
+
+describe('formatErrorResponse', () => {
+  // This text is returned as tool output, so it reaches the model verbatim --
+  // the same reason the API response body is left out below it. A stack
+  // trace here would leak local file paths and internal call structure.
+  it('never puts the stack trace in the model-facing text', () => {
+    const error = new Error('boom');
+    const { content } = formatErrorResponse(error, 'Test Step');
+    const text = content[0].text;
+
+    expect(text).toContain('boom');
+    expect(text).not.toContain('at ');
+    expect(text).not.toContain(__filename);
   });
 });
 
