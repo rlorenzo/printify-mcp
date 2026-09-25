@@ -119,9 +119,24 @@ export function validateFilePath(filePath: string, operation: 'read' | 'write'):
   }
 
   if (!inside) {
+    const usingDefaultDir = !process.env.ALLOWED_FILE_DIR;
+
+    // Full detail, including the server's absolute working directory, is
+    // logged for the operator. The model-facing message below leaves the
+    // path out when it defaults to cwd: that path is server-internal detail,
+    // not something a tool caller needs, and echoing it back through tool
+    // output is exactly what this whole check exists to avoid doing with
+    // other paths.
+    console.error(describeError(new Error(
+      `File ${operation} denied: "${resolved}" is outside the allowed directory "${baseDir}".`
+    )));
+
     throw new Error(
-      `File ${operation} denied: "${resolved}" is outside the allowed directory "${baseDir}". ` +
-      `Set ALLOWED_FILE_DIR to permit another location.`
+      usingDefaultDir
+        ? `File ${operation} denied: "${resolved}" is outside the allowed directory ` +
+          `(the working directory; set ALLOWED_FILE_DIR to change it).`
+        : `File ${operation} denied: "${resolved}" is outside the allowed directory "${baseDir}". ` +
+          `Set ALLOWED_FILE_DIR to permit another location.`
     );
   }
 

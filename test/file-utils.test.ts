@@ -54,6 +54,24 @@ describe('validateFilePath', () => {
     }
   });
 
+  // The absolute cwd is server-internal detail; the model-facing denial
+  // message must not echo it back just because ALLOWED_FILE_DIR is unset.
+  it('keeps the working directory out of the denial message when ALLOWED_FILE_DIR is unset', () => {
+    let message = '';
+    try {
+      validateFilePath('/etc/passwd', 'read');
+    } catch (error: any) {
+      message = error.message;
+    }
+    expect(message).toMatch(/outside the allowed directory/);
+    expect(message).not.toContain(process.cwd());
+  });
+
+  it('names the configured directory when ALLOWED_FILE_DIR is set explicitly', () => {
+    process.env.ALLOWED_FILE_DIR = '/tmp/allowed';
+    expect(() => validateFilePath('/etc/passwd', 'read')).toThrow(/"\/tmp\/allowed"/);
+  });
+
   it('names the operation in the error', () => {
     expect(() => validateFilePath('/etc/passwd', 'write')).toThrow(/File write denied/);
   });
