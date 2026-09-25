@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import {
   validateFilePath,
   ensureDirectoryExists,
@@ -39,6 +40,18 @@ describe('validateFilePath', () => {
     process.env.ALLOWED_FILE_DIR = '/tmp/allowed';
     // /tmp/allowed-evil must not pass a naive startsWith check.
     expect(() => validateFilePath('/tmp/allowed-evil/x', 'read')).toThrow(/outside the allowed directory/);
+  });
+
+  // Lexically inside the base, but the symlink points outside it.
+  it('refuses a path that escapes through a symlink', () => {
+    const dir = path.join(process.cwd(), '.tmp-link-test');
+    fs.mkdirSync(dir, { recursive: true });
+    try {
+      fs.symlinkSync(os.tmpdir(), path.join(dir, 'out'));
+      expect(() => validateFilePath(path.join(dir, 'out', 'x.png'), 'write')).toThrow(/outside the allowed directory/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('names the operation in the error', () => {

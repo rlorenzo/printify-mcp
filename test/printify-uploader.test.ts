@@ -33,12 +33,12 @@ describe('determineImageSourceType', () => {
     expect(determineImageSourceType(s)).toBe('url');
   });
 
-  it.each([['/abs/x.png'], ['C:\\x.png'], ['C:/x.png'], ['rel\\x.png']])('%s is a file', (s) => {
+  it.each([['/abs/x.png'], ['C:\\x.png'], ['C:/x.png'], ['rel\\x.png'], ['../x.png'], ['iVBORw0KGgoAAAANSUhEUg=='], ['/9j/4AAQSkZJRg==']])('%s is a file', (s) => {
     expect(determineImageSourceType(s)).toBe('file');
   });
 
-  it('falls back to base64', () => {
-    expect(determineImageSourceType('iVBORw0KGgoAAAANSUhEUg==')).toBe('base64');
+  it('treats a data URL as base64', () => {
+    expect(determineImageSourceType('data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==')).toBe('base64');
   });
 });
 
@@ -52,8 +52,8 @@ describe('uploadImageToPrintify', () => {
 
   it('uploads a base64 payload directly', async () => {
     const c = client();
-    await uploadImageToPrintify(c, 'a.png', 'iVBORw0KGgo=');
-    expect(c.uploadImage).toHaveBeenCalledWith('a.png', 'iVBORw0KGgo=');
+    await uploadImageToPrintify(c, 'a.png', 'data:image/png;base64,iVBORw0KGgo=');
+    expect(c.uploadImage).toHaveBeenCalledWith('a.png', 'data:image/png;base64,iVBORw0KGgo=');
   });
 
   it('verifies and uploads a real file', async () => {
@@ -106,13 +106,16 @@ describe('uploadImageToPrintify', () => {
 });
 
 describe('uploadImageToPrintify diagnostics', () => {
-  it('includes Printify response detail when the API returns one', async () => {
+  it('includes the Printify status but not the response body', async () => {
     const err: any = new Error('rejected');
-    err.response = { status: 422, statusText: 'Unprocessable', data: { message: 'bad image' }, headers: {} };
+    err.response = { status: 422, statusText: 'Unprocessable', data: { message: 'body-leak' }, headers: { 'x-leak': 'header-leak' } };
     const c = client({ uploadImage: vi.fn(async () => { throw err; }) });
     const r = await uploadImageToPrintify(c, 'a.png', 'https://example.test/a.png');
     expect(r.success).toBe(false);
-    expect(JSON.stringify(r.errorResponse)).toContain('422');
+    const text = JSON.stringify(r.errorResponse);
+    expect(text).toContain('422');
+    expect(text).not.toContain('body-leak');
+    expect(text).not.toContain('header-leak');
   });
 
   it('reports file diagnostics when a file upload fails', async () => {
@@ -167,7 +170,7 @@ describe('uploadImageToPrintify diagnostics', () => {
 
   it('tailors tips to a base64 source', async () => {
     const c = client({ uploadImage: vi.fn(async () => { throw new Error('bad'); }) });
-    const r = await uploadImageToPrintify(c, 'a.png', 'iVBORw0KGgo=');
+    const r = await uploadImageToPrintify(c, 'a.png', 'data:image/png;base64,iVBORw0KGgo=');
     expect(JSON.stringify(r.errorResponse)).toMatch(/base64/);
   });
 });

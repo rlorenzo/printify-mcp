@@ -122,6 +122,18 @@ describe('generate_and_upload_image', () => {
     expect(res.content[0].text).toMatch(/printify rejected/);
   });
 
+  // The response body can echo request data, so only the status reaches the model.
+  it('reports the HTTP status of an upload failure but not the response body', async () => {
+    const err = Object.assign(new Error('bad request'), { response: { status: 400, data: { secret: 'body-leak' } } });
+    const h = harness({
+      printifyClient: fakePrintify({ uploadImage: vi.fn(async () => { throw err; }) }),
+      replicateClient: fakeReplicate()
+    });
+    const res = await h.call('generate_and_upload_image', { prompt: 'x', fileName: 'f' });
+    expect(res.content[0].text).toContain('HTTP status: 400');
+    expect(res.content[0].text).not.toContain('body-leak');
+  });
+
   it('requires a Replicate client', async () => {
     const h = harness({ printifyClient: fakePrintify(), replicateClient: null });
     const res = await h.call('generate_and_upload_image', { prompt: 'x', fileName: 'f' });
@@ -146,6 +158,22 @@ describe('generate_image', () => {
     expect(res.isError).toBeFalsy();
     expect(fs.existsSync(out)).toBe(true);
     expect((await sharp(out).metadata()).format).toBe('png');
+  });
+
+  it('refuses an output path outside ALLOWED_FILE_DIR', async () => {
+    fs.mkdirSync(scratch, { recursive: true });
+    process.env.ALLOWED_FILE_DIR = scratch;
+    try {
+      const replicate = fakeReplicate();
+      const out = path.join(scratch, '..', '.tmp-escape.png');
+      const res = await harness({ replicateClient: replicate }).call('generate_image', { prompt: 'x', outputPath: out });
+      expect(res.isError).toBe(true);
+      expect(res.content[0].text).toMatch(/outside the allowed directory/);
+      expect(replicate.generateImage).not.toHaveBeenCalled();
+      expect(fs.existsSync(out)).toBe(false);
+    } finally {
+      delete process.env.ALLOWED_FILE_DIR;
+    }
   });
 
   it('requires a Replicate client', async () => {

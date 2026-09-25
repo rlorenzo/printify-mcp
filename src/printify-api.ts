@@ -3,6 +3,7 @@ import * as path from 'path';
 import Printify from 'printify-sdk-js';
 import sharp from 'sharp';
 import { describeError } from './utils/error-handler.js';
+import { validateFilePath } from './utils/file-utils.js';
 import { applyOutputFormat, mimeTypeFor } from './services/image-format.js';
 
 // Shop interface
@@ -614,7 +615,7 @@ export class PrintifyAPI {
       }
 
       // If it's a file path, try to read the file and convert to base64
-      if (source.startsWith('file://') || source.includes(':\\') || source.includes(':/') || !source.startsWith('data:')) {
+      if (!source.startsWith('data:')) {
         try {
           console.error(`Attempting to read file from: ${source}`);
 
@@ -632,28 +633,15 @@ export class PrintifyAPI {
             filePath = filePath.substring(1);
           }
 
+          // Every local read ends here, so this is the guard that holds even
+          // for callers that skip uploadImageToPrintify's own validation.
+          filePath = validateFilePath(filePath, 'read');
           console.error(`Normalized file path: ${filePath}`);
 
           // Check if file exists
           if (!fs.existsSync(filePath)) {
             const error = new Error(`File not found: ${filePath}`);
             console.error('File not found error:', describeError(error));
-            console.error('Current working directory:', process.cwd());
-            console.error('File path type:', typeof filePath);
-            console.error('Absolute path check:', path.isAbsolute(filePath) ? 'Absolute' : 'Relative');
-
-            // Try to list the directory contents if possible
-            try {
-              const dir = path.dirname(filePath);
-              if (fs.existsSync(dir)) {
-                console.error('Directory exists. Contents:', fs.readdirSync(dir));
-              } else {
-                console.error('Parent directory does not exist:', dir);
-              }
-            } catch (dirError) {
-              console.error('Error checking directory:', describeError(dirError));
-            }
-
             throw error;
           }
 
@@ -711,16 +699,11 @@ export class PrintifyAPI {
 
           throw new Error(detailedError, { cause: error });
         }
-      } else if (source.startsWith('data:image/')) {
-        // If source is base64 data with data URL prefix
-        // Extract the base64 content
-        const base64Content = source.split(',')[1];
+      } else {
+        // data: URL: the base64 payload is everything after the comma.
+        const base64Content = source.split(',')[1] ?? '';
         console.error(`Uploading image with base64 data from data URL (length: ${base64Content.length})`);
         return await this.client.uploads.uploadImage({ file_name: fileName, contents: base64Content });
-      } else {
-        // Otherwise, assume it's a base64 encoded string without prefix
-        console.error(`Uploading image with base64 data (length: ${source.length})`);
-        return await this.client.uploads.uploadImage({ file_name: fileName, contents: source });
       }
     } catch (error: any) {
       console.error('Error uploading image:', describeError(error));

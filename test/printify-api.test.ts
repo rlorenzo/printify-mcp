@@ -122,6 +122,13 @@ describe('uploadImage source handling', () => {
       .rejects.toThrow();
   });
 
+  // A relative path used to skip ALLOWED_FILE_DIR entirely.
+  it('refuses a relative path that escapes the allowed directory', async () => {
+    const { instance, uploadImage } = api();
+    await expect(instance.uploadImage('x.png', '../outside/x.png')).rejects.toThrow(/outside the allowed directory/);
+    expect(uploadImage).not.toHaveBeenCalled();
+  });
+
   it('propagates an SDK upload failure', async () => {
     const { instance } = api({ uploads: { uploadImage: vi.fn(async () => { throw new Error('rejected by API'); }) } });
     await expect(instance.uploadImage('a.png', 'https://example.test/a.png')).rejects.toThrow(/rejected by API/);
@@ -558,8 +565,9 @@ describe('uploadImage file validation', () => {
     const { instance } = api();
     const err = await instance.uploadImage('w.png', 'file:///C:/nope/missing.png').catch((e: Error) => e);
     // The message echoes the original source too, so assert on the resolved
-    // path the code actually tried to open.
-    expect(err.message).toContain('File not found: C:/nope/missing.png');
+    // path the code actually tried to open. Unstripped, /C:/... would be an
+    // absolute path outside the allowed directory and be refused instead.
+    expect(err.message).toContain(path.resolve('C:/nope/missing.png'));
   });
 
   it('reports a missing parent directory', async () => {
