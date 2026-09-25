@@ -896,7 +896,19 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       try {
         ensureDirectoryExists(path.dirname(outputPath));
 
-        fs.writeFileSync(outputPath, imageBuffer);
+        // O_NOFOLLOW makes the open atomic with the symlink check: if outputPath
+        // was swapped for a symlink during the Replicate round-trip (the window
+        // between the directory check above and this write), the open fails
+        // instead of following it and writing outside ALLOWED_FILE_DIR.
+        const fd = fs.openSync(
+          outputPath,
+          fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | (fs.constants.O_NOFOLLOW || 0)
+        );
+        try {
+          fs.writeSync(fd, imageBuffer);
+        } finally {
+          fs.closeSync(fd);
+        }
 
         // Return success response
         const response = formatSuccessResponse(
