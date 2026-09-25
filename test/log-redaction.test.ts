@@ -139,6 +139,18 @@ describe('formatErrorResponse', () => {
     expect(text).not.toContain('at ');
     expect(text).not.toContain(__filename);
   });
+
+  // Not everything thrown is an Error object; formatErrorResponse must report
+  // it rather than crash trying to read .constructor/.message off it.
+  it('reports a thrown string instead of crashing', () => {
+    const { content } = formatErrorResponse('boom', 'Test Step');
+    expect(content[0].text).toContain('boom');
+  });
+
+  it('reports a thrown undefined instead of crashing', () => {
+    const { content } = formatErrorResponse(undefined, 'Test Step');
+    expect(content[0].text).toContain('undefined');
+  });
 });
 
 describe('PrintifyAPI logging', () => {

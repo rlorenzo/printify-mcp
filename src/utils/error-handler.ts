@@ -100,9 +100,12 @@ export function formatErrorResponse(
   context: Record<string, any> = {},
   tips: string[] = []
 ) {
-  // Get error details
-  const errorType = error.constructor.name;
-  const errorMessage = error.message || 'Unknown error';
+  // Get error details. `error` is whatever was thrown, not necessarily an
+  // Error -- a thrown string/null/undefined has no .constructor/.message to
+  // read, which would otherwise crash the formatter instead of reporting it.
+  const isErrorObject = error !== null && typeof error === 'object';
+  const errorType = isErrorObject && error.constructor ? error.constructor.name : typeof error;
+  const errorMessage = isErrorObject && error.message ? error.message : String(error);
 
   // Format the error message
   let text = `❌ **Error in ${step}**\n\n`;
@@ -132,7 +135,7 @@ export function formatErrorResponse(
   
   // Add API response status if available. The response body is deliberately
   // omitted: it can carry account details, and it reaches the model verbatim.
-  if (error.response) {
+  if (isErrorObject && error.response) {
     text += `- **API Response Status**: ${error.response.status}\n\n`;
   }
   
