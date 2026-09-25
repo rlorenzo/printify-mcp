@@ -846,10 +846,12 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       } catch (error: any) {
         return toolError(error.message);
       }
-      // Refuse a directory up front so a doomed write never costs a Replicate call.
-      if (fs.existsSync(outputPath) && fs.statSync(outputPath).isDirectory()) {
-        return toolError(`outputPath "${outputPath}" is a directory; give a file path.`);
-      }
+      // A directory or symlink at outputPath is rejected atomically by the
+      // O_NOFOLLOW-guarded open below, not by a separate check-then-write
+      // here: checking first and writing later (after the Replicate call)
+      // leaves a window for the target to be swapped out from under us
+      // (CWE-367). The atomic open costs a Replicate call on a bad path, but
+      // closes the race.
 
       // Extract filename from the output path
       const fileName = path.basename(outputPath);
