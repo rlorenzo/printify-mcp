@@ -827,7 +827,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
     "generate_image",
     {
       prompt: z.string().describe("Text prompt for image generation"),
-      outputPath: z.string().describe("Full path where the generated image should be saved"),
+      outputPath: z.string().describe("Path where the generated image should be saved; must be inside ALLOWED_FILE_DIR (default: the working directory)"),
 
       ...imageGenerationOptions
     },
@@ -845,6 +845,10 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
         outputPath = validateFilePath(rawOutputPath, 'write');
       } catch (error: any) {
         return toolError(error.message);
+      }
+      // Refuse a directory up front so a doomed write never costs a Replicate call.
+      if (fs.existsSync(outputPath) && fs.statSync(outputPath).isDirectory()) {
+        return toolError(`outputPath "${outputPath}" is a directory; give a file path.`);
       }
 
       // Extract filename from the output path

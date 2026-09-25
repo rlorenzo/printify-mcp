@@ -701,7 +701,8 @@ export class PrintifyAPI {
         }
       } else {
         // data: URL: the base64 payload is everything after the comma.
-        const base64Content = source.split(',')[1] ?? '';
+        // Slice after the first comma: base64 payloads never contain commas, but be exact.
+        const base64Content = source.slice(source.indexOf(',') + 1);
         console.error(`Uploading image with base64 data from data URL (length: ${base64Content.length})`);
         return await this.client.uploads.uploadImage({ file_name: fileName, contents: base64Content });
       }
