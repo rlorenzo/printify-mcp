@@ -176,6 +176,50 @@ describe('generate_image', () => {
     }
   });
 
+  // CWE-367: outputPath is validated before the (often slow) Replicate call,
+  // then written after it. On POSIX, O_NOFOLLOW refuses to write through a
+  // symlink swapped in during that window instead of silently following it.
+  it('rejects a symlink swapped in for outputPath during generation', async () => {
+    if (process.platform === 'win32') return; // O_NOFOLLOW is a no-op there; see the comment in tools.ts.
+    fs.mkdirSync(scratch, { recursive: true });
+    const out = path.join(scratch, 'out.png');
+    const target = path.join(scratch, 'target.png');
+    const replicate = fakeReplicate({
+      generateImage: vi.fn(async () => {
+        fs.symlinkSync(target, out); // out doesn't exist yet: validation already ran, the write hasn't.
+        return await png();
+      })
+    });
+    const res = await harness({ replicateClient: replicate }).call('generate_image', { prompt: 'x', outputPath: out });
+    expect(res.isError).toBe(true);
+    expect(fs.existsSync(target)).toBe(false);
+  });
+
+  // The confinement check at the top of the handler is stale by the time the
+  // write happens; re-validating right before the write is what actually
+  // enforces ALLOWED_FILE_DIR if it changes while generation is in flight.
+  it('re-validates against ALLOWED_FILE_DIR right before writing', async () => {
+    fs.mkdirSync(scratch, { recursive: true });
+    process.env.ALLOWED_FILE_DIR = scratch;
+    const out = path.join(scratch, 'out.png');
+    try {
+      const replicate = fakeReplicate({
+        generateImage: vi.fn(async () => {
+          const narrower = path.join(scratch, 'narrower');
+          fs.mkdirSync(narrower, { recursive: true });
+          process.env.ALLOWED_FILE_DIR = narrower; // sandbox narrows mid-flight
+          return await png();
+        })
+      });
+      const res = await harness({ replicateClient: replicate }).call('generate_image', { prompt: 'x', outputPath: out });
+      expect(res.isError).toBe(true);
+      expect(res.content[0].text).toMatch(/outside the allowed directory/);
+      expect(fs.existsSync(out)).toBe(false);
+    } finally {
+      delete process.env.ALLOWED_FILE_DIR;
+    }
+  });
+
   it('requires a Replicate client', async () => {
     const h = harness({ replicateClient: null });
     const res = await h.call('generate_image', { prompt: 'x', outputPath: '/tmp/x.png' });

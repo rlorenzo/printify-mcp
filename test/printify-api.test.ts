@@ -524,6 +524,15 @@ describe('uploadImage remaining branches', () => {
     expect(uploadImage).not.toHaveBeenCalled();
   });
 
+  // Without a `;base64` marker, a data URL's payload is percent-encoded text
+  // per RFC 2397, not base64 -- accepting it would forward the raw text as
+  // `contents` to Printify's API.
+  it('rejects a data URL without a ;base64 marker', async () => {
+    const { instance, uploadImage } = api();
+    await expect(instance.uploadImage('bare.png', 'data:text/plain,hello')).rejects.toThrow(/Invalid data URL/);
+    expect(uploadImage).not.toHaveBeenCalled();
+  });
+
   it('rejects a non-image file', async () => {
     fs.mkdirSync(scratch, { recursive: true });
     const f = path.join(scratch, 'notes.txt');

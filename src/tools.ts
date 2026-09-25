@@ -896,12 +896,22 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       }
 
       try {
+        // Re-validate right before writing: the check at the top of this
+        // handler ran before the (often multi-second) Replicate call, which
+        // is plenty of time for outputPath to be swapped for a symlink
+        // pointing outside ALLOWED_FILE_DIR. Re-resolving here shrinks that
+        // window, on every platform, to the two calls immediately below.
+        outputPath = validateFilePath(rawOutputPath, 'write');
+
         ensureDirectoryExists(path.dirname(outputPath));
 
-        // O_NOFOLLOW makes the open atomic with the symlink check: if outputPath
-        // was swapped for a symlink during the Replicate round-trip (the window
-        // between the directory check above and this write), the open fails
-        // instead of following it and writing outside ALLOWED_FILE_DIR.
+        // O_NOFOLLOW closes the remaining gap on POSIX (Linux/macOS): if
+        // outputPath was swapped for a symlink between the revalidation
+        // above and this open, the open fails with ELOOP instead of
+        // following it. `O_NOFOLLOW` is undefined on Windows, so the `|| 0`
+        // there is a no-op fallback, not a mitigation -- on that platform
+        // this open can still follow a symlink swapped in that instant, and
+        // the revalidation above is the only protection.
         const fd = fs.openSync(
           outputPath,
           fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | (fs.constants.O_NOFOLLOW || 0)
