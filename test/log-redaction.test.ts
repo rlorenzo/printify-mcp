@@ -162,7 +162,7 @@ describe('formatErrorResponse', () => {
   // Whitespace-separated text passes the long-run collapse at any length.
   it('caps the total length of the model-facing text', () => {
     const { content } = formatErrorResponse(new Error('word '.repeat(20_000)), 'Test Step');
-    expect(content[0].text.length).toBeLessThan(4200);
+    expect(content[0].text.length).toBeLessThanOrEqual(4000);
     expect(content[0].text).toMatch(/truncated, \d+ chars total/);
   });
 
@@ -170,7 +170,7 @@ describe('formatErrorResponse', () => {
   // reports the real length and says it was cut.
   it('reports the full length of an input too large to scan', () => {
     const { content } = formatErrorResponse(new Error('A'.repeat(200_000)), 'Test Step');
-    expect(content[0].text.length).toBeLessThan(4200);
+    expect(content[0].text.length).toBeLessThanOrEqual(4000);
     expect(content[0].text).toMatch(/truncated, \d{6} chars total/);
   });
 

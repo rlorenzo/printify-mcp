@@ -280,7 +280,7 @@ export async function uploadImageToPrintify(
       tips.push('Recommended resolution for JPEG/PNG files is 300 DPI');
       tips.push('Maximum file size is 20MB');
     } else {
-      tips.push('Make sure the base64 string is valid and represents an image');
+      tips.push('Make sure the data URL has the form data:<mime>;base64,<payload> and represents an image');
     }
 
     // Gather as much diagnostic information as possible

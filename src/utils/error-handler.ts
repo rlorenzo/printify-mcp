@@ -154,9 +154,12 @@ const MAX_SCANNED_TEXT = 64_000;
 export function boundErrorText(text: string): string {
   const collapsed = text.slice(0, MAX_SCANNED_TEXT).replace(new RegExp(`\\S{${MAX_UNBROKEN_RUN + 1},}`, 'g'),
     run => `${run.slice(0, RUN_PREVIEW)}... (${run.length} chars)`);
-  return collapsed.length > MAX_ERROR_TEXT || text.length > MAX_SCANNED_TEXT
-    ? `${collapsed.slice(0, MAX_ERROR_TEXT)}\n... (truncated, ${text.length} chars total)`
-    : collapsed;
+  if (collapsed.length <= MAX_ERROR_TEXT && text.length <= MAX_SCANNED_TEXT) {
+    return collapsed;
+  }
+  // The note counts toward the cap, so the result never exceeds it.
+  const note = `\n... (truncated, ${text.length} chars total)`;
+  return collapsed.slice(0, MAX_ERROR_TEXT - note.length) + note;
 }
 
 /**

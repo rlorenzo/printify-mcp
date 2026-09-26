@@ -693,7 +693,7 @@ export class PrintifyAPI {
           detailedError += 'Troubleshooting steps:\n';
           detailedError += '1. Check if the file exists and is readable\n';
           detailedError += '2. Make sure the file is a valid image (PNG, JPEG, etc.)\n';
-          detailedError += '3. Try using a URL or base64 encoded string instead\n';
+          detailedError += '3. Try using a URL or a data URL (data:<mime>;base64,<payload>) instead\n';
           detailedError += '\nFile processing details:\n';
           detailedError += `- Attempted to read from: ${previewText(source)}\n`;
 
