@@ -120,7 +120,11 @@ export function describeThrownValue(error: unknown): { errorType: string; errorM
   const e = error as { constructor?: { name?: string }; message?: unknown };
   return {
     errorType: e.constructor?.name || 'Object',
-    errorMessage: e.message ? String(e.message) : String(error)
+    // An Error with an empty message still stringifies to its name
+    // ("TypeError"); any other object would stringify to "[object Object]".
+    errorMessage: e.message
+      ? String(e.message)
+      : error instanceof Error ? String(error) : 'Unknown error'
   };
 }
 

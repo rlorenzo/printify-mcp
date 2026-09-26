@@ -174,6 +174,17 @@ describe('formatErrorResponse', () => {
     expect(content[0].text).toMatch(/truncated, \d{6} chars total/);
   });
 
+  it('reports an Error with an empty message by its name', () => {
+    const { content } = formatErrorResponse(new TypeError(''), 'Test Step');
+    expect(content[0].text).toContain('- **Error**: TypeError');
+  });
+
+  it('reports a thrown object without a message as unknown, not [object Object]', () => {
+    const { content } = formatErrorResponse({ code: 5 }, 'Test Step');
+    expect(content[0].text).toContain('- **Error**: Unknown error');
+    expect(content[0].text).not.toContain('[object Object]');
+  });
+
   // typeof null is 'object', which would misreport the type.
   it('reports a thrown null as type null', () => {
     const { content } = formatErrorResponse(null, 'Test Step');
