@@ -920,7 +920,9 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
           fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | (fs.constants.O_NOFOLLOW || 0)
         );
         try {
-          fs.writeSync(fd, imageBuffer);
+          // writeFileSync loops until the whole buffer is written; a single
+          // writeSync may write fewer bytes and silently truncate the image.
+          fs.writeFileSync(fd, imageBuffer);
         } finally {
           fs.closeSync(fd);
         }
