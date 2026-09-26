@@ -43,11 +43,17 @@ describe('validateFilePath', () => {
   });
 
   // Lexically inside the base, but the symlink points outside it.
-  it('refuses a path that escapes through a symlink', () => {
+  it('refuses a path that escapes through a symlink', (ctx) => {
     const dir = path.join(process.cwd(), '.tmp-link-test');
     fs.mkdirSync(dir, { recursive: true });
     try {
-      fs.symlinkSync(os.tmpdir(), path.join(dir, 'out'));
+      try {
+        fs.symlinkSync(os.tmpdir(), path.join(dir, 'out'));
+      } catch (error: any) {
+        // Windows refuses symlinks without Developer Mode or admin rights.
+        if (error?.code === 'EPERM') return ctx.skip();
+        throw error;
+      }
       expect(() => validateFilePath(path.join(dir, 'out', 'x.png'), 'write')).toThrow(/outside the allowed directory/);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
