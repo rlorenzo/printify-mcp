@@ -128,14 +128,21 @@ const RUN_PREVIEW = 60;
 const MAX_ERROR_TEXT = 4000;
 
 /**
+ * How much of the input the collapsing pass looks at. Enough that collapsed
+ * runs still leave MAX_ERROR_TEXT worth of real content, without scanning an
+ * arbitrarily large caller-supplied string just to throw most of it away.
+ */
+const MAX_SCANNED_TEXT = 64_000;
+
+/**
  * Bound error text before it is returned to the model: collapse overlong
  * unbroken runs, then cap the total length.
  */
 export function boundErrorText(text: string): string {
-  const collapsed = text.replace(new RegExp(`\\S{${MAX_UNBROKEN_RUN + 1},}`, 'g'),
+  const collapsed = text.slice(0, MAX_SCANNED_TEXT).replace(new RegExp(`\\S{${MAX_UNBROKEN_RUN + 1},}`, 'g'),
     run => `${run.slice(0, RUN_PREVIEW)}... (${run.length} chars)`);
-  return collapsed.length > MAX_ERROR_TEXT
-    ? `${collapsed.slice(0, MAX_ERROR_TEXT)}\n... (truncated, ${collapsed.length} chars total)`
+  return collapsed.length > MAX_ERROR_TEXT || text.length > MAX_SCANNED_TEXT
+    ? `${collapsed.slice(0, MAX_ERROR_TEXT)}\n... (truncated, ${text.length} chars total)`
     : collapsed;
 }
 

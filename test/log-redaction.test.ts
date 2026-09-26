@@ -159,6 +159,14 @@ describe('formatErrorResponse', () => {
     expect(content[0].text).toMatch(/truncated, \d+ chars total/);
   });
 
+  // The collapsing pass only scans a bounded prefix, but the reply still
+  // reports the real length and says it was cut.
+  it('reports the full length of an input too large to scan', () => {
+    const { content } = formatErrorResponse(new Error('A'.repeat(200_000)), 'Test Step');
+    expect(content[0].text.length).toBeLessThan(4200);
+    expect(content[0].text).toMatch(/truncated, \d{6} chars total/);
+  });
+
   // typeof null is 'object', which would misreport the type.
   it('reports a thrown null as type null', () => {
     const { content } = formatErrorResponse(null, 'Test Step');
