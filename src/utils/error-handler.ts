@@ -27,6 +27,17 @@ function formatFields(fields: Record<string, any>): string {
  */
 const MAX_LOGGED_BODY = 2000;
 
+/**
+ * `text` whole if it is at most `max` chars, else a short head plus its
+ * length. For echoing caller-supplied strings (a path, a source, a message)
+ * into a log line or reply, where they can be arbitrarily large.
+ */
+export function previewText(text: string, max = 200): string {
+  return text.length > max
+    ? `${text.slice(0, Math.floor(max / 2))}... (${text.length} chars)`
+    : text;
+}
+
 function safeJson(value: any): string {
   try {
     const text = JSON.stringify(value);
@@ -59,12 +70,14 @@ function safeJson(value: any): string {
  * returns its validation errors.
  */
 export function describeError(error: any): string {
+  // Messages routinely quote caller-supplied input, so they are bounded
+  // like the response body below.
   if (error === null || error === undefined || typeof error !== 'object') {
-    return String(error);
+    return previewText(String(error), MAX_LOGGED_BODY);
   }
 
   const name = error.name || error.constructor?.name || 'Error';
-  const parts = [`${name}: ${error.message || '(no message)'}`];
+  const parts = [`${name}: ${previewText(String(error.message || '(no message)'), MAX_LOGGED_BODY)}`];
 
   if (error.code) {
     parts.push(`code=${error.code}`);

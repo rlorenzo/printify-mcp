@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import Printify from 'printify-sdk-js';
 import sharp from 'sharp';
-import { describeError } from './utils/error-handler.js';
+import { describeError, previewText } from './utils/error-handler.js';
 import { validateFilePath } from './utils/file-utils.js';
 import { applyOutputFormat, mimeTypeFor } from './services/image-format.js';
 
@@ -617,7 +617,7 @@ export class PrintifyAPI {
       // If it's a file path, try to read the file and convert to base64
       if (!source.startsWith('data:')) {
         try {
-          console.error(`Attempting to read file from: ${source}`);
+          console.error(`Attempting to read file from: ${previewText(source)}`);
 
           // Handle file:// protocol
           let filePath = source;
@@ -636,7 +636,7 @@ export class PrintifyAPI {
           // Every local read ends here, so this is the guard that holds even
           // for callers that skip uploadImageToPrintify's own validation.
           filePath = validateFilePath(filePath, 'read');
-          console.error(`Normalized file path: ${filePath}`);
+          console.error(`Normalized file path: ${previewText(filePath)}`);
 
           // Check if file exists
           if (!fs.existsSync(filePath)) {
@@ -689,13 +689,13 @@ export class PrintifyAPI {
           const errorMessage = error.message || 'Unknown error';
 
           // Create a detailed error message with troubleshooting information
-          let detailedError = `Failed to process file ${source}: ${errorMessage}\n\n`;
+          let detailedError = `Failed to process file ${previewText(source)}: ${errorMessage}\n\n`;
           detailedError += 'Troubleshooting steps:\n';
           detailedError += '1. Check if the file exists and is readable\n';
           detailedError += '2. Make sure the file is a valid image (PNG, JPEG, etc.)\n';
           detailedError += '3. Try using a URL or base64 encoded string instead\n';
           detailedError += '\nFile processing details:\n';
-          detailedError += `- Attempted to read from: ${source}\n`;
+          detailedError += `- Attempted to read from: ${previewText(source)}\n`;
 
           throw new Error(detailedError, { cause: error });
         }

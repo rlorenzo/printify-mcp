@@ -121,6 +121,13 @@ describe('describeError', () => {
     expect(describeError('just a string')).toBe('just a string');
   });
 
+  // Messages quote caller-supplied input (a path, a raw base64 source) that
+  // can be arbitrarily large; the operator log must not be flooded by it.
+  it('bounds a huge message', () => {
+    expect(describeError(new Error('A'.repeat(100_000))).length).toBeLessThan(2500);
+    expect(describeError('B'.repeat(100_000)).length).toBeLessThan(2500);
+  });
+
   it('names an error that has no message', () => {
     expect(describeError(new Error())).toContain('Error: (no message)');
   });
@@ -188,6 +195,19 @@ describe('PrintifyAPI logging', () => {
 
     expect(output).not.toContain(TOKEN);
     expect(output).toContain('API token present');
+  });
+
+  // Raw base64 is treated as a file path now, so a failed upload used to
+  // write the whole payload to stderr -- several times over.
+  it('does not flood the log with a huge upload source', async () => {
+    const payload = 'A'.repeat(50_000);
+    const output = await captureStderr(async () => {
+      const instance = new PrintifyAPI(TOKEN, '42');
+      await expect(instance.uploadImage('a.png', payload)).rejects.toThrow();
+    });
+
+    expect(output).not.toContain('A'.repeat(2_001));
+    expect(output.length).toBeLessThan(20_000);
   });
 
   it('says so when no token was supplied', async () => {

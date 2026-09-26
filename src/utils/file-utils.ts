@@ -4,7 +4,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomBytes } from 'crypto';
-import { describeError } from './error-handler.js';
+import { describeError, previewText } from './error-handler.js';
 
 /**
  * Ensure a directory exists, creating it if necessary
@@ -131,15 +131,14 @@ export function validateFilePath(filePath: string, operation: 'read' | 'write'):
     // output is exactly what this whole check exists to avoid doing with
     // other paths. For the same reason it names the path as the caller gave
     // it, not `resolved`: resolving a relative path prefixes the cwd.
+    // The path is model-supplied and can be any length; quote a preview in
+    // both messages so it cannot flood the log, and so the reason after it
+    // survives any cap on the reply.
     console.error(describeError(new Error(
-      `File ${operation} denied: "${resolved}" is outside the allowed directory "${baseDir}".`
+      `File ${operation} denied: "${previewText(resolved)}" is outside the allowed directory "${baseDir}".`
     )));
 
-    // The path is model-supplied and can be any length; quote a preview so
-    // the reason after it survives any cap on the reply.
-    const shown = filePath.length > 200
-      ? `${filePath.slice(0, 100)}... (${filePath.length} chars)`
-      : filePath;
+    const shown = previewText(filePath);
     throw new Error(
       usingDefaultDir
         ? `File ${operation} denied: "${shown}" is outside the allowed directory ` +
