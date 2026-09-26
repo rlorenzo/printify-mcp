@@ -92,6 +92,26 @@ export function describeError(error: any): string {
 }
 
 /**
+ * Type name and message of a caught value. `error` is whatever was thrown, not
+ * necessarily an Error -- a thrown string/null/undefined has no
+ * .constructor/.message to read, which would otherwise crash the caller
+ * instead of reporting the original failure.
+ */
+export function describeThrownValue(error: unknown): { errorType: string; errorMessage: string } {
+  if (error === null) {
+    return { errorType: 'null', errorMessage: 'null' };
+  }
+  if (typeof error !== 'object') {
+    return { errorType: typeof error, errorMessage: String(error) };
+  }
+  const e = error as { constructor?: { name?: string }; message?: unknown };
+  return {
+    errorType: e.constructor?.name || 'Object',
+    errorMessage: e.message ? String(e.message) : String(error)
+  };
+}
+
+/**
  * Format an error response for tool output
  */
 export function formatErrorResponse(
@@ -100,12 +120,7 @@ export function formatErrorResponse(
   context: Record<string, any> = {},
   tips: string[] = []
 ) {
-  // Get error details. `error` is whatever was thrown, not necessarily an
-  // Error -- a thrown string/null/undefined has no .constructor/.message to
-  // read, which would otherwise crash the formatter instead of reporting it.
-  const isErrorObject = error !== null && typeof error === 'object';
-  const errorType = isErrorObject && error.constructor ? error.constructor.name : typeof error;
-  const errorMessage = isErrorObject && error.message ? error.message : String(error);
+  const { errorType, errorMessage } = describeThrownValue(error);
 
   // Format the error message
   let text = `❌ **Error in ${step}**\n\n`;
@@ -135,7 +150,7 @@ export function formatErrorResponse(
   
   // Add API response status if available. The response body is deliberately
   // omitted: it can carry account details, and it reaches the model verbatim.
-  if (isErrorObject && error.response) {
+  if (error?.response) {
     text += `- **API Response Status**: ${error.response.status}\n\n`;
   }
   

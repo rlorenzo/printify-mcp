@@ -118,6 +118,18 @@ describe('uploadImageToPrintify diagnostics', () => {
     expect(text).not.toContain('header-leak');
   });
 
+  // Not everything thrown is an Error; building the diagnostics must not
+  // itself throw and mask the original failure.
+  it.each([['a string', 'upload broke'], ['null', null], ['undefined', undefined]])(
+    'reports a thrown %s instead of crashing',
+    async (_label, thrown) => {
+      const c = client({ uploadImage: vi.fn(async () => { throw thrown; }) });
+      const r = await uploadImageToPrintify(c, 'a.png', 'https://example.test/a.png');
+      expect(r.success).toBe(false);
+      expect(JSON.stringify(r.errorResponse)).toContain(String(thrown));
+    }
+  );
+
   it('reports file diagnostics when a file upload fails', async () => {
     const f = await pngFile('fails.png');
     const c = client({ uploadImage: vi.fn(async () => { throw new Error('nope'); }) });

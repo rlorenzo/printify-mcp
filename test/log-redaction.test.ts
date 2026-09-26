@@ -151,6 +151,12 @@ describe('formatErrorResponse', () => {
     const { content } = formatErrorResponse(undefined, 'Test Step');
     expect(content[0].text).toContain('undefined');
   });
+
+  // typeof null is 'object', which would misreport the type.
+  it('reports a thrown null as type null', () => {
+    const { content } = formatErrorResponse(null, 'Test Step');
+    expect(content[0].text).toContain('**Error Type**: null');
+  });
 });
 
 describe('PrintifyAPI logging', () => {

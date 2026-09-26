@@ -3,7 +3,7 @@
  */
 // No need for fs and path imports
 import { PrintifyAPI, requireShop } from '../printify-api.js';
-import { describeError, formatErrorResponse, formatSuccessResponse } from '../utils/error-handler.js';
+import { describeError, describeThrownValue, formatErrorResponse, formatSuccessResponse } from '../utils/error-handler.js';
 import { getFileInfo, validateFilePath } from '../utils/file-utils.js';
 
 /**
@@ -284,13 +284,14 @@ export async function uploadImageToPrintify(
     }
 
     // Gather as much diagnostic information as possible
+    const { errorType, errorMessage } = describeThrownValue(error);
     const diagnosticInfo: any = {
       FileName: fileName,
       SourceType: sourceTypeLabel,
       Source: sourceType === 'url' ? source : (sourceType === 'file' ? source : `${source.substring(0, 30)}...`),
       CurrentShop: printifyClient.getCurrentShop(),
-      ErrorType: error.constructor.name,
-      ErrorMessage: error.message,
+      ErrorType: errorType,
+      ErrorMessage: errorMessage,
       NodeVersion: process.version,
       Platform: process.platform,
       // Add Printify client information
@@ -306,7 +307,7 @@ export async function uploadImageToPrintify(
 
     // Status only: the response body and headers stay in the stderr log
     // (describeError above), not in text returned to the model.
-    if (error.response) {
+    if (error?.response) {
       diagnosticInfo.PrintifyResponseStatus = error.response.status;
       diagnosticInfo.PrintifyResponseStatusText = error.response.statusText;
     }
