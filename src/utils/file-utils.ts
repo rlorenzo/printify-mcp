@@ -73,7 +73,9 @@ export function getFileInfo(filePath: string): { exists: boolean; size?: number;
 /**
  * realpath of `p`, resolved through its deepest existing ancestor so a file
  * that does not exist yet (a write target) still has symlinks above it
- * followed. Throws for a dangling symlink, which callers treat as a denial.
+ * followed. Throws for a dangling symlink, or for a segment that exists but
+ * cannot be inspected (EACCES/EPERM) -- only a genuinely missing segment is
+ * walked past -- and callers treat either as a denial.
  */
 function realpathNearest(p: string): string {
   let existing = p;
@@ -81,7 +83,8 @@ function realpathNearest(p: string): string {
     try {
       fs.lstatSync(existing);
       break;
-    } catch {
+    } catch (error: any) {
+      if (error?.code !== 'ENOENT' && error?.code !== 'ENOTDIR') throw error;
       const parent = path.dirname(existing);
       if (parent === existing) break;
       existing = parent;
@@ -126,16 +129,17 @@ export function validateFilePath(filePath: string, operation: 'read' | 'write'):
     // path out when it defaults to cwd: that path is server-internal detail,
     // not something a tool caller needs, and echoing it back through tool
     // output is exactly what this whole check exists to avoid doing with
-    // other paths.
+    // other paths. For the same reason it names the path as the caller gave
+    // it, not `resolved`: resolving a relative path prefixes the cwd.
     console.error(describeError(new Error(
       `File ${operation} denied: "${resolved}" is outside the allowed directory "${baseDir}".`
     )));
 
     throw new Error(
       usingDefaultDir
-        ? `File ${operation} denied: "${resolved}" is outside the allowed directory ` +
+        ? `File ${operation} denied: "${filePath}" is outside the allowed directory ` +
           `(the working directory; set ALLOWED_FILE_DIR to change it).`
-        : `File ${operation} denied: "${resolved}" is outside the allowed directory "${baseDir}". ` +
+        : `File ${operation} denied: "${filePath}" is outside the allowed directory "${baseDir}". ` +
           `Set ALLOWED_FILE_DIR to permit another location.`
     );
   }

@@ -67,6 +67,18 @@ describe('validateFilePath', () => {
     expect(message).not.toContain(process.cwd());
   });
 
+  // path.resolve would prefix a relative input with the absolute cwd.
+  it('keeps the working directory out of the denial message for a relative path', () => {
+    let message = '';
+    try {
+      validateFilePath('../outside/x.png', 'read');
+    } catch (error: any) {
+      message = error.message;
+    }
+    expect(message).toContain('"../outside/x.png"');
+    expect(message).not.toContain(process.cwd());
+  });
+
   it('names the configured directory when ALLOWED_FILE_DIR is set explicitly', () => {
     process.env.ALLOWED_FILE_DIR = '/tmp/allowed';
     expect(() => validateFilePath('/etc/passwd', 'read')).toThrow(/"\/tmp\/allowed"/);
