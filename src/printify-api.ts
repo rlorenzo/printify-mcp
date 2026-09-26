@@ -640,7 +640,7 @@ export class PrintifyAPI {
 
           // Check if file exists
           if (!fs.existsSync(filePath)) {
-            const error = new Error(`File not found: ${filePath}`);
+            const error = new Error(`File not found: ${previewText(filePath)}`);
             console.error('File not found error:', describeError(error));
             throw error;
           }
@@ -650,7 +650,7 @@ export class PrintifyAPI {
           console.error(`File size: ${stats.size} bytes`);
 
           if (stats.size === 0) {
-            throw new Error(`File is empty: ${filePath}`);
+            throw new Error(`File is empty: ${previewText(filePath)}`);
           }
 
           if (stats.size > 10 * 1024 * 1024) { // 10MB limit

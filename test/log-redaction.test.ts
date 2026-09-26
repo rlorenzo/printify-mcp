@@ -221,6 +221,19 @@ describe('PrintifyAPI logging', () => {
     expect(output.length).toBeLessThan(20_000);
   });
 
+  // The thrown message quotes the path too; bound it where it is built,
+  // not only where it is later logged or returned.
+  it('bounds the path quoted in a file-not-found error', async () => {
+    const instance = new PrintifyAPI(TOKEN, '42');
+    // Long but under PATH_MAX, so it passes the sandbox check and reaches
+    // the existence check instead of failing with ENAMETOOLONG first.
+    const error = await instance.uploadImage('a.png', 'dir/'.repeat(300) + 'x.png').catch((e: Error) => e);
+    expect((error as Error).cause).toBeInstanceOf(Error);
+    const message = ((error as Error).cause as Error).message;
+    expect(message).toMatch(/^File not found: .*\.\.\. \(\d+ chars\)$/);
+    expect(message.length).toBeLessThan(300);
+  });
+
   it('says so when no token was supplied', async () => {
     // The SDK rejects an empty token; the log line lands first and explains why.
     const output = await captureStderr(() => {
