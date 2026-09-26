@@ -152,6 +152,13 @@ describe('formatErrorResponse', () => {
     expect(content[0].text).toContain('undefined');
   });
 
+  // Whitespace-separated text passes the long-run collapse at any length.
+  it('caps the total length of the model-facing text', () => {
+    const { content } = formatErrorResponse(new Error('word '.repeat(20_000)), 'Test Step');
+    expect(content[0].text.length).toBeLessThan(4200);
+    expect(content[0].text).toMatch(/truncated, \d+ chars total/);
+  });
+
   // typeof null is 'object', which would misreport the type.
   it('reports a thrown null as type null', () => {
     const { content } = formatErrorResponse(null, 'Test Step');

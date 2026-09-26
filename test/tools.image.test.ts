@@ -176,6 +176,17 @@ describe('generate_image', () => {
     }
   });
 
+  // The denial echoes outputPath, which is model-supplied and can be any
+  // length; spaces in it defeat the long-run collapsing. The reply must stay
+  // small and still say why the path was refused.
+  it('bounds the error text when a huge outputPath is refused', async () => {
+    const out = '/outside/' + 'dir with spaces/'.repeat(5_000) + 'x.png';
+    const res = await harness({ replicateClient: fakeReplicate() }).call('generate_image', { prompt: 'x', outputPath: out });
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toMatch(/outside the allowed directory/);
+    expect(res.content[0].text.length).toBeLessThan(1000);
+  });
+
   // CWE-367: outputPath is validated before the (often slow) Replicate call,
   // then written after it. On POSIX, O_NOFOLLOW refuses to write through a
   // symlink swapped in during that window instead of silently following it.

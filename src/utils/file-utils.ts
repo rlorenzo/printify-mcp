@@ -135,11 +135,16 @@ export function validateFilePath(filePath: string, operation: 'read' | 'write'):
       `File ${operation} denied: "${resolved}" is outside the allowed directory "${baseDir}".`
     )));
 
+    // The path is model-supplied and can be any length; quote a preview so
+    // the reason after it survives any cap on the reply.
+    const shown = filePath.length > 200
+      ? `${filePath.slice(0, 100)}... (${filePath.length} chars)`
+      : filePath;
     throw new Error(
       usingDefaultDir
-        ? `File ${operation} denied: "${filePath}" is outside the allowed directory ` +
+        ? `File ${operation} denied: "${shown}" is outside the allowed directory ` +
           `(the working directory; set ALLOWED_FILE_DIR to change it).`
-        : `File ${operation} denied: "${filePath}" is outside the allowed directory "${baseDir}". ` +
+        : `File ${operation} denied: "${shown}" is outside the allowed directory "${baseDir}". ` +
           `Set ALLOWED_FILE_DIR to permit another location.`
     );
   }

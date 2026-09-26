@@ -120,9 +120,23 @@ export function describeThrownValue(error: unknown): { errorType: string; errorM
 const MAX_UNBROKEN_RUN = 200;
 const RUN_PREVIEW = 60;
 
-function collapseLongRuns(text: string): string {
-  return text.replace(new RegExp(`\\S{${MAX_UNBROKEN_RUN + 1},}`, 'g'),
+/**
+ * Hard cap on a whole model-facing error text. Collapsing long runs alone does
+ * not bound it: caller-supplied text with whitespace in it (a long prompt, a
+ * path full of spaces) passes that check at any length.
+ */
+const MAX_ERROR_TEXT = 4000;
+
+/**
+ * Bound error text before it is returned to the model: collapse overlong
+ * unbroken runs, then cap the total length.
+ */
+export function boundErrorText(text: string): string {
+  const collapsed = text.replace(new RegExp(`\\S{${MAX_UNBROKEN_RUN + 1},}`, 'g'),
     run => `${run.slice(0, RUN_PREVIEW)}... (${run.length} chars)`);
+  return collapsed.length > MAX_ERROR_TEXT
+    ? `${collapsed.slice(0, MAX_ERROR_TEXT)}\n... (truncated, ${collapsed.length} chars total)`
+    : collapsed;
 }
 
 /**
@@ -178,7 +192,7 @@ export function formatErrorResponse(
   }
   
   return {
-    content: [{ type: "text", text: collapseLongRuns(text) }],
+    content: [{ type: "text", text: boundErrorText(text) }],
     isError: true
   };
 }

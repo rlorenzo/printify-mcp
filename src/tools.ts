@@ -15,7 +15,7 @@ import { mergeGenerationOptions } from "./generation-options.js";
 import { stageOnImgbb, requiresImgbb, hasImgbbKey } from "./services/imgbb.js";
 import { saveDebugCopy } from "./services/image-format.js";
 import { generateImage } from "./services/image-generator.js";
-import { describeError, formatSuccessResponse } from "./utils/error-handler.js";
+import { boundErrorText, describeError, formatSuccessResponse } from "./utils/error-handler.js";
 import { ensureDirectoryExists, validateFilePath } from "./utils/file-utils.js";
 import * as shops from "./services/printify-shops.js";
 import * as products from "./services/printify-products.js";
@@ -54,7 +54,8 @@ type ToolResult = { content: any[]; isError?: boolean };
 
 /** An error inside the MCP result envelope, so it reaches the model rather than the transport. */
 function toolError(text: string): ToolResult {
-  return { content: [{ type: "text", text }], isError: true };
+  // Often carries an error.message that echoes model-supplied input.
+  return { content: [{ type: "text", text: boundErrorText(text) }], isError: true };
 }
 
 /** The defaults as markdown table rows, shared by get_defaults and set_default. */
