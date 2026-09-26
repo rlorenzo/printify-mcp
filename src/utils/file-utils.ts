@@ -151,3 +151,66 @@ export function validateFilePath(filePath: string, operation: 'read' | 'write'):
 
   return resolved;
 }
+
+/**
+ * Read a file confined to ALLOWED_FILE_DIR, checking the file actually read
+ * rather than only the path.
+ *
+ * validateFilePath checks a path at one moment; opening that path again by
+ * name later (sharp(path), readFileSync(path)) re-resolves it, so a file or a
+ * parent directory swapped for a symlink in between would be followed out of
+ * the sandbox. Here the file is opened once -- with O_NOFOLLOW, which refuses a
+ * swapped final component on POSIX -- then the path is re-validated and must
+ * still name the very file that was opened (same device and inode), which
+ * catches a swapped parent directory. Size checks and the read itself go
+ * through that descriptor, never the name again.
+ *
+ * On a filesystem that reports no inode numbers (0 for both sides) the
+ * identity check cannot tell files apart and the re-validation is what
+ * remains.
+ */
+export function readConfinedFile(filePath: string, maxBytes: number): { resolved: string; data: Buffer } {
+  const resolved = validateFilePath(filePath, 'read');
+
+  let fd: number;
+  try {
+    fd = fs.openSync(resolved, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+  } catch (error: any) {
+    if (error?.code === 'ENOENT') {
+      throw new Error(`File not found: ${previewText(resolved)}`, { cause: error });
+    }
+    if (error?.code === 'ELOOP') {
+      throw new Error(`File read denied: "${previewText(filePath)}" is a symbolic link.`, { cause: error });
+    }
+    throw error;
+  }
+
+  try {
+    const opened = fs.fstatSync(fd);
+
+    // The path must still pass the sandbox check and still name the file we
+    // hold open; otherwise something was swapped between check and open.
+    validateFilePath(filePath, 'read');
+    const current = fs.statSync(resolved);
+    if (current.dev !== opened.dev || current.ino !== opened.ino) {
+      throw new Error(`File read denied: "${previewText(filePath)}" changed while it was being opened.`);
+    }
+
+    if (!opened.isFile()) {
+      throw new Error(`Not a regular file: ${previewText(resolved)}`);
+    }
+    if (opened.size === 0) {
+      throw new Error(`File is empty: ${previewText(resolved)}`);
+    }
+    if (opened.size > maxBytes) {
+      throw new Error(
+        `File is too large (${Math.round(opened.size / (1024 * 1024))}MB). ` +
+        `Maximum size is ${Math.round(maxBytes / (1024 * 1024))}MB.`
+      );
+    }
+
+    return { resolved, data: fs.readFileSync(fd) };
+  } finally {
+    fs.closeSync(fd);
+  }
+}

@@ -3,7 +3,7 @@ import * as path from 'path';
 import Printify from 'printify-sdk-js';
 import sharp from 'sharp';
 import { describeError, previewText } from './utils/error-handler.js';
-import { validateFilePath } from './utils/file-utils.js';
+import { readConfinedFile } from './utils/file-utils.js';
 import { applyOutputFormat, mimeTypeFor } from './services/image-format.js';
 
 // Shop interface
@@ -634,35 +634,19 @@ export class PrintifyAPI {
           }
 
           // Every local read ends here, so this is the guard that holds even
-          // for callers that skip uploadImageToPrintify's own validation.
-          filePath = validateFilePath(filePath, 'read');
-          console.error(`Normalized file path: ${previewText(filePath)}`);
-
-          // Check if file exists
-          if (!fs.existsSync(filePath)) {
-            const error = new Error(`File not found: ${previewText(filePath)}`);
-            console.error('File not found error:', describeError(error));
-            throw error;
-          }
-
-          // Get file stats
-          const stats = fs.statSync(filePath);
-          console.error(`File size: ${stats.size} bytes`);
-
-          if (stats.size === 0) {
-            throw new Error(`File is empty: ${previewText(filePath)}`);
-          }
-
-          if (stats.size > 10 * 1024 * 1024) { // 10MB limit
-            throw new Error(`File is too large (${Math.round(stats.size / (1024 * 1024))}MB). Maximum size is 10MB.`);
-          }
+          // for callers that skip uploadImageToPrintify's own validation. The
+          // file is opened once and read through that descriptor; see
+          // readConfinedFile for why the path is never opened by name again.
+          const { resolved, data } = readConfinedFile(filePath, 10 * 1024 * 1024);
+          filePath = resolved;
+          console.error(`Read ${data.length} bytes from ${previewText(filePath)}`);
 
           // Process the image with Sharp
           console.error('Processing image with Sharp before uploading...');
 
           const ext = path.extname(filePath).toLowerCase();
           const outputFormat = ext === '.jpg' || ext === '.jpeg' ? 'jpeg' : 'png';
-          const buffer = await applyOutputFormat(sharp(filePath), outputFormat).toBuffer();
+          const buffer = await applyOutputFormat(sharp(data), outputFormat).toBuffer();
           console.error(`Image processed successfully: ${buffer.length} bytes`);
           const mimeType = mimeTypeFor(outputFormat);
 
