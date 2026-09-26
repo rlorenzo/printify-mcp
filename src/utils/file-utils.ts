@@ -124,20 +124,21 @@ export function validateFilePath(filePath: string, operation: 'read' | 'write'):
   if (!inside) {
     const usingDefaultDir = !process.env.ALLOWED_FILE_DIR;
 
-    // Full detail, including the server's absolute working directory, is
-    // logged for the operator. The model-facing message below leaves the
-    // path out when it defaults to cwd: that path is server-internal detail,
-    // not something a tool caller needs, and echoing it back through tool
-    // output is exactly what this whole check exists to avoid doing with
-    // other paths. For the same reason it names the path as the caller gave
-    // it, not `resolved`: resolving a relative path prefixes the cwd.
-    // The path is model-supplied and can be any length; quote a preview in
-    // both messages so it cannot flood the log, and so the reason after it
+    // The path is model-supplied and can be any length, so both messages
+    // quote a preview: it cannot flood the log, and the reason after it
     // survives any cap on the reply.
+
+    // Operator log: full detail -- the resolved path and the base directory,
+    // including the server's absolute working directory.
     console.error(describeError(new Error(
       `File ${operation} denied: "${previewText(resolved)}" is outside the allowed directory "${baseDir}".`
     )));
 
+    // Model-facing message: leaves the base directory out when it defaults
+    // to cwd, and names the path as the caller gave it rather than
+    // `resolved`, which for a relative path is prefixed with the cwd. That
+    // path is server-internal detail, and echoing it back through tool output
+    // is exactly what this check exists to avoid doing with other paths.
     const shown = previewText(filePath);
     throw new Error(
       usingDefaultDir
