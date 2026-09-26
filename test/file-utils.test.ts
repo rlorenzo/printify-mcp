@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import {
   validateFilePath,
   ensureDirectoryExists,
@@ -39,6 +40,54 @@ describe('validateFilePath', () => {
     process.env.ALLOWED_FILE_DIR = '/tmp/allowed';
     // /tmp/allowed-evil must not pass a naive startsWith check.
     expect(() => validateFilePath('/tmp/allowed-evil/x', 'read')).toThrow(/outside the allowed directory/);
+  });
+
+  // Lexically inside the base, but the symlink points outside it.
+  it('refuses a path that escapes through a symlink', (ctx) => {
+    const dir = path.join(process.cwd(), '.tmp-link-test');
+    fs.mkdirSync(dir, { recursive: true });
+    try {
+      try {
+        fs.symlinkSync(os.tmpdir(), path.join(dir, 'out'));
+      } catch (error: any) {
+        // Windows refuses symlinks without Developer Mode or admin rights.
+        if (error?.code === 'EPERM') return ctx.skip();
+        throw error;
+      }
+      expect(() => validateFilePath(path.join(dir, 'out', 'x.png'), 'write')).toThrow(/outside the allowed directory/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // The absolute cwd is server-internal detail; the model-facing denial
+  // message must not echo it back just because ALLOWED_FILE_DIR is unset.
+  it('keeps the working directory out of the denial message when ALLOWED_FILE_DIR is unset', () => {
+    let message = '';
+    try {
+      validateFilePath('/etc/passwd', 'read');
+    } catch (error: any) {
+      message = error.message;
+    }
+    expect(message).toMatch(/outside the allowed directory/);
+    expect(message).not.toContain(process.cwd());
+  });
+
+  // path.resolve would prefix a relative input with the absolute cwd.
+  it('keeps the working directory out of the denial message for a relative path', () => {
+    let message = '';
+    try {
+      validateFilePath('../outside/x.png', 'read');
+    } catch (error: any) {
+      message = error.message;
+    }
+    expect(message).toContain('"../outside/x.png"');
+    expect(message).not.toContain(process.cwd());
+  });
+
+  it('names the configured directory when ALLOWED_FILE_DIR is set explicitly', () => {
+    process.env.ALLOWED_FILE_DIR = '/tmp/allowed';
+    expect(() => validateFilePath('/etc/passwd', 'read')).toThrow(/"\/tmp\/allowed"/);
   });
 
   it('names the operation in the error', () => {
