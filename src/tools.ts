@@ -15,7 +15,8 @@ import { mergeGenerationOptions } from "./generation-options.js";
 import { stageOnImgbb, requiresImgbb, hasImgbbKey } from "./services/imgbb.js";
 import { saveDebugCopy } from "./services/image-format.js";
 import { generateImage } from "./services/image-generator.js";
-import { formatSuccessResponse } from "./utils/error-handler.js";
+import { boundErrorText, describeError, formatSuccessResponse } from "./utils/error-handler.js";
+import { ensureDirectoryExists, validateFilePath } from "./utils/file-utils.js";
 import * as shops from "./services/printify-shops.js";
 import * as products from "./services/printify-products.js";
 import * as blueprints from "./services/printify-blueprints.js";
@@ -53,7 +54,8 @@ type ToolResult = { content: any[]; isError?: boolean };
 
 /** An error inside the MCP result envelope, so it reaches the model rather than the transport. */
 function toolError(text: string): ToolResult {
-  return { content: [{ type: "text", text }], isError: true };
+  // Often carries an error.message that echoes model-supplied input.
+  return { content: [{ type: "text", text: boundErrorText(text) }], isError: true };
 }
 
 /** The defaults as markdown table rows, shared by get_defaults and set_default. */
@@ -198,12 +200,15 @@ async function uploadGenerated(
   return image;
 }
 
+const READ_ONLY = { readOnlyHint: true };
+
 /** Register every Printify tool and prompt on `server`. */
 export function registerTools(server: McpServer, ctx: PrintifyContext): void {
   // Get Printify status tool
   server.tool(
     "get_printify_status",
     {},
+    READ_ONLY,
     async (): Promise<{ content: any[], isError?: boolean }> => {
       if (!printifyReady(ctx)) return printifyNotReady();
 
@@ -217,6 +222,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
   server.tool(
     "list_shops",
     {},
+    READ_ONLY,
     async (): Promise<{ content: any[], isError?: boolean }> => {
       if (!printifyReady(ctx)) return printifyNotReady();
 
@@ -250,6 +256,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       page: z.number().optional().default(1).describe("Page number"),
       limit: z.number().optional().default(10).describe("Number of products per page")
     },
+    READ_ONLY,
     async ({ page, limit }): Promise<{ content: any[], isError?: boolean }> => {
       if (!printifyReady(ctx)) return printifyNotReady();
 
@@ -265,6 +272,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
     {
       productId: z.string().describe("Product ID")
     },
+    READ_ONLY,
     async ({ productId }): Promise<{ content: any[], isError?: boolean }> => {
       if (!printifyReady(ctx)) return printifyNotReady();
 
@@ -322,6 +330,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       printAreas: printAreasSchema.optional().describe("Print areas for the product"),
       tags: z.array(z.string()).optional().describe("Tags for the product")
     },
+    { title: "Update product", destructiveHint: true, idempotentHint: false },
     async ({ productId, title, description, variants, printAreas, tags }): Promise<{ content: any[], isError?: boolean }> => {
       if (!printifyReady(ctx)) return printifyNotReady();
 
@@ -343,6 +352,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
     {
       productId: z.string().describe("Product ID")
     },
+    { title: "Delete product", destructiveHint: true, idempotentHint: false },
     async ({ productId }): Promise<{ content: any[], isError?: boolean }> => {
       if (!printifyReady(ctx)) return printifyNotReady();
 
@@ -365,6 +375,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
         tags: z.boolean().optional().default(true).describe("Publish tags")
       }).optional().describe("Publish details")
     },
+    { title: "Publish product", destructiveHint: true, idempotentHint: false },
     async ({ productId, publishDetails }): Promise<{ content: any[], isError?: boolean }> => {
       if (!printifyReady(ctx)) return printifyNotReady();
 
@@ -381,6 +392,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       page: z.number().optional().default(1).describe("Page number"),
       limit: z.number().optional().default(10).describe("Number of blueprints per page (max 100)")
     },
+    READ_ONLY,
     async ({ page, limit }): Promise<{ content: any[], isError?: boolean }> => {
       if (!printifyReady(ctx)) return printifyNotReady();
 
@@ -396,6 +408,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
     {
       blueprintId: z.string().describe("Blueprint ID")
     },
+    READ_ONLY,
     async ({ blueprintId }): Promise<{ content: any[], isError?: boolean }> => {
       if (!printifyReady(ctx)) return printifyNotReady();
 
@@ -411,6 +424,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
     {
       blueprintId: z.string().describe("Blueprint ID")
     },
+    READ_ONLY,
     async ({ blueprintId }): Promise<{ content: any[], isError?: boolean }> => {
       if (!printifyReady(ctx)) return printifyNotReady();
 
@@ -429,6 +443,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       page: z.number().optional().default(1).describe("Page number"),
       limit: z.number().optional().default(50).describe("Number of variants per page (max 100)")
     },
+    READ_ONLY,
     async ({ blueprintId, printProviderId, page, limit }): Promise<{ content: any[], isError?: boolean }> => {
       if (!printifyReady(ctx)) return printifyNotReady();
 
@@ -443,7 +458,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
     "upload_image",
     {
       fileName: z.string().describe("File name"),
-      url: z.string().describe("URL of the image to upload, path to local file, or base64 encoded image data")
+      url: z.string().describe("URL of the image to upload, path to a local file inside ALLOWED_FILE_DIR, or a data: URL with base64 image data")
     },
     async ({ fileName, url }): Promise<{ content: any[], isError?: boolean }> => {
       if (!printifyReady(ctx)) return printifyNotReady();
@@ -468,6 +483,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
   server.tool(
     "get_defaults",
     {},
+    READ_ONLY,
     async () => {
       try {
         const defaults = defaultsFor(ctx);
@@ -593,6 +609,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
         "image_generation"
       ]).describe("The topic to get documentation for")
     },
+    READ_ONLY,
     async ({ topic }) => {
       try {
         // Resolved from this module's own location, so it works regardless of
@@ -772,9 +789,11 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       try {
         image = await uploadGenerated(ctx.printifyClient, finalFileName, imageBuffer, mimeType, uploadMethod, imageUrl);
       } catch (uploadError: any) {
+        console.error('Error uploading generated image to Printify:', describeError(uploadError));
+        const status = uploadError.response?.status;
         return toolError(`Error uploading to Printify: ${uploadError.message || String(uploadError)}\n\n` +
-                  `Upload method: ${uploadMethod}${imageUrl ? `\nImgBB URL: ${imageUrl}` : ''}\n\n` +
-                  `Response data: ${JSON.stringify(uploadError.response?.data || {}, null, 2)}`);
+                  `Upload method: ${uploadMethod}${imageUrl ? `\nImgBB URL: ${imageUrl}` : ''}` +
+                  (status ? `\n\nHTTP status: ${status}` : ''));
       }
 
       // STEP 7: Return success response
@@ -809,17 +828,33 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
     "generate_image",
     {
       prompt: z.string().describe("Text prompt for image generation"),
-      outputPath: z.string().describe("Full path where the generated image should be saved"),
+      outputPath: z.string().describe("Path where the generated image should be saved; must be inside ALLOWED_FILE_DIR (default: the working directory)"),
 
       ...imageGenerationOptions
     },
     async ({
-      prompt, outputPath, model, width, height, aspectRatio, outputFormat, safetyTolerance,
+      prompt, outputPath: rawOutputPath, model, width, height, aspectRatio, outputFormat, safetyTolerance,
       seed, numInferenceSteps, guidanceScale, negativePrompt, promptUpsampling, outputQuality,
       raw, imagePromptStrength
     }): Promise<{ content: any[], isError?: boolean }> => {
       // Check if Replicate client is initialized
       if (!ctx.replicateClient) return replicateNotReady();
+
+      // Validated before generating, so a rejected path costs no Replicate spend.
+      let outputPath: string;
+      try {
+        outputPath = validateFilePath(rawOutputPath, 'write');
+      } catch (error: any) {
+        return toolError(error.message);
+      }
+      // Sandbox confinement is checked just above, before Replicate is
+      // called. A directory or symlink at outputPath inside the sandbox is
+      // rejected atomically by the O_NOFOLLOW-guarded open below, not by a
+      // separate check-then-write
+      // here: checking first and writing later (after the Replicate call)
+      // leaves a window for the target to be swapped out from under us
+      // (CWE-367). The atomic open costs a Replicate call on a bad path, but
+      // closes the race.
 
       // Extract filename from the output path
       const fileName = path.basename(outputPath);
@@ -864,13 +899,33 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       }
 
       try {
-        // Create the directory if it doesn't exist
-        const outputDir = path.dirname(outputPath);
-        if (!fs.existsSync(outputDir)) {
-          fs.mkdirSync(outputDir, { recursive: true });
-        }
+        // Re-validate right before writing: the check at the top of this
+        // handler ran before the (often multi-second) Replicate call, which
+        // is plenty of time for outputPath to be swapped for a symlink
+        // pointing outside ALLOWED_FILE_DIR. Re-resolving here shrinks that
+        // window, on every platform, to the two calls immediately below.
+        outputPath = validateFilePath(rawOutputPath, 'write');
 
-        fs.writeFileSync(outputPath, imageBuffer);
+        ensureDirectoryExists(path.dirname(outputPath));
+
+        // O_NOFOLLOW closes the remaining gap on POSIX (Linux/macOS): if
+        // outputPath was swapped for a symlink between the revalidation
+        // above and this open, the open fails with ELOOP instead of
+        // following it. `O_NOFOLLOW` is undefined on Windows, so the `|| 0`
+        // there is a no-op fallback, not a mitigation -- on that platform
+        // this open can still follow a symlink swapped in that instant, and
+        // the revalidation above is the only protection.
+        const fd = fs.openSync(
+          outputPath,
+          fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | (fs.constants.O_NOFOLLOW || 0)
+        );
+        try {
+          // writeFileSync loops until the whole buffer is written; a single
+          // writeSync may write fewer bytes and silently truncate the image.
+          fs.writeFileSync(fd, imageBuffer);
+        } finally {
+          fs.closeSync(fd);
+        }
 
         // Return success response
         const response = formatSuccessResponse(

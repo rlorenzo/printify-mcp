@@ -27,6 +27,17 @@ function formatFields(fields: Record<string, any>): string {
  */
 const MAX_LOGGED_BODY = 2000;
 
+/**
+ * `text` whole if it is at most `max` chars, else a short head plus its
+ * length. For echoing caller-supplied strings (a path, a source, a message)
+ * into a log line or reply, where they can be arbitrarily large.
+ */
+export function previewText(text: string, max = 200): string {
+  return text.length > max
+    ? `${text.slice(0, Math.floor(max / 2))}... (${text.length} chars)`
+    : text;
+}
+
 function safeJson(value: any): string {
   try {
     const text = JSON.stringify(value);
@@ -59,12 +70,14 @@ function safeJson(value: any): string {
  * returns its validation errors.
  */
 export function describeError(error: any): string {
+  // Messages routinely quote caller-supplied input, so they are bounded
+  // like the response body below.
   if (error === null || error === undefined || typeof error !== 'object') {
-    return String(error);
+    return previewText(String(error), MAX_LOGGED_BODY);
   }
 
   const name = error.name || error.constructor?.name || 'Error';
-  const parts = [`${name}: ${error.message || '(no message)'}`];
+  const parts = [`${name}: ${previewText(String(error.message || '(no message)'), MAX_LOGGED_BODY)}`];
 
   if (error.code) {
     parts.push(`code=${error.code}`);
@@ -92,6 +105,68 @@ export function describeError(error: any): string {
 }
 
 /**
+ * Type name and message of a caught value. `error` is whatever was thrown, not
+ * necessarily an Error -- a thrown string/null/undefined has no
+ * .constructor/.message to read, which would otherwise crash the caller
+ * instead of reporting the original failure.
+ */
+export function describeThrownValue(error: unknown): { errorType: string; errorMessage: string } {
+  if (error === null) {
+    return { errorType: 'null', errorMessage: 'null' };
+  }
+  if (typeof error !== 'object') {
+    return { errorType: typeof error, errorMessage: String(error) };
+  }
+  const e = error as { constructor?: { name?: string }; message?: unknown };
+  return {
+    errorType: e.constructor?.name || 'Object',
+    // An Error with an empty message still stringifies to its name
+    // ("TypeError"); any other object would stringify to "[object Object]".
+    errorMessage: e.message
+      ? String(e.message)
+      : error instanceof Error ? String(error) : 'Unknown error'
+  };
+}
+
+/**
+ * Longest unbroken run of non-whitespace an error response passes through
+ * whole. A caller-supplied source (a raw base64 payload taken for a file path,
+ * say) is echoed by several messages on the way here; collapsing overlong runs
+ * at this one choke point keeps every echo from flooding the model's context.
+ */
+const MAX_UNBROKEN_RUN = 200;
+const RUN_PREVIEW = 60;
+
+/**
+ * Hard cap on a whole model-facing error text. Collapsing long runs alone does
+ * not bound it: caller-supplied text with whitespace in it (a long prompt, a
+ * path full of spaces) passes that check at any length.
+ */
+const MAX_ERROR_TEXT = 4000;
+
+/**
+ * How much of the input the collapsing pass looks at. Enough that collapsed
+ * runs still leave MAX_ERROR_TEXT worth of real content, without scanning an
+ * arbitrarily large caller-supplied string just to throw most of it away.
+ */
+const MAX_SCANNED_TEXT = 64_000;
+
+/**
+ * Bound error text before it is returned to the model: collapse overlong
+ * unbroken runs, then cap the total length.
+ */
+export function boundErrorText(text: string): string {
+  const collapsed = text.slice(0, MAX_SCANNED_TEXT).replace(new RegExp(`\\S{${MAX_UNBROKEN_RUN + 1},}`, 'g'),
+    run => `${run.slice(0, RUN_PREVIEW)}... (${run.length} chars)`);
+  if (collapsed.length <= MAX_ERROR_TEXT && text.length <= MAX_SCANNED_TEXT) {
+    return collapsed;
+  }
+  // The note counts toward the cap, so the result never exceeds it.
+  const note = `\n... (truncated, ${text.length} chars total)`;
+  return collapsed.slice(0, MAX_ERROR_TEXT - note.length) + note;
+}
+
+/**
  * Format an error response for tool output
  */
 export function formatErrorResponse(
@@ -100,24 +175,23 @@ export function formatErrorResponse(
   context: Record<string, any> = {},
   tips: string[] = []
 ) {
-  // Get error details
-  const errorType = error.constructor.name;
-  const errorMessage = error.message || 'Unknown error';
-  const errorStack = error.stack ? error.stack.split('\n').slice(0, 3).join('\n') : 'Not available';
-  
+  const { errorType, errorMessage } = describeThrownValue(error);
+
   // Format the error message
   let text = `❌ **Error in ${step}**\n\n`;
-  
+
   // Add context information
   text += formatFields(context);
-  
+
   text += `- **Error**: ${errorMessage}\n\n`;
-  
-  // Add detailed diagnostic information
+
+  // Add detailed diagnostic information. The stack trace is deliberately
+  // left out here, same as the API response body below: it reaches the
+  // model verbatim and can carry local file paths and internal call
+  // structure. Callers already log it to stderr via describeError.
   text += `=== DETAILED DIAGNOSTIC INFORMATION ===\n\n`;
   text += `- **Error Type**: ${errorType}\n`;
-  text += `- **Error Stack**: ${errorStack}\n`;
-  
+
   // Add additional context details
   Object.entries(context).forEach(([key, value]) => {
     if (key !== 'Prompt' && key !== 'Model' && key !== 'Error') {
@@ -131,7 +205,7 @@ export function formatErrorResponse(
   
   // Add API response status if available. The response body is deliberately
   // omitted: it can carry account details, and it reaches the model verbatim.
-  if (error.response) {
+  if (error?.response) {
     text += `- **API Response Status**: ${error.response.status}\n\n`;
   }
   
@@ -145,7 +219,7 @@ export function formatErrorResponse(
   }
   
   return {
-    content: [{ type: "text", text }],
+    content: [{ type: "text", text: boundErrorText(text) }],
     isError: true
   };
 }

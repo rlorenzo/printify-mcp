@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { format } from 'node:util';
 import { AxiosError, AxiosHeaders } from 'axios';
-import { describeError } from '../src/utils/error-handler.js';
+import { describeError, formatErrorResponse } from '../src/utils/error-handler.js';
 import { PrintifyAPI } from '../src/printify-api.js';
 
 const TOKEN = 'super-secret-printify-token';
@@ -121,8 +121,74 @@ describe('describeError', () => {
     expect(describeError('just a string')).toBe('just a string');
   });
 
+  // Messages quote caller-supplied input (a path, a raw base64 source) that
+  // can be arbitrarily large; the operator log must not be flooded by it.
+  it('bounds a huge message', () => {
+    expect(describeError(new Error('A'.repeat(100_000))).length).toBeLessThan(2500);
+    expect(describeError('B'.repeat(100_000)).length).toBeLessThan(2500);
+  });
+
   it('names an error that has no message', () => {
     expect(describeError(new Error())).toContain('Error: (no message)');
+  });
+});
+
+describe('formatErrorResponse', () => {
+  // This text is returned as tool output, so it reaches the model verbatim --
+  // the same reason the API response body is left out below it. A stack
+  // trace here would leak local file paths and internal call structure.
+  it('never puts the stack trace in the model-facing text', () => {
+    const error = new Error('boom');
+    const { content } = formatErrorResponse(error, 'Test Step');
+    const text = content[0].text;
+
+    expect(text).toContain('boom');
+    expect(text).not.toContain('at ');
+    expect(text).not.toContain(__filename);
+  });
+
+  // Not everything thrown is an Error object; formatErrorResponse must report
+  // it rather than crash trying to read .constructor/.message off it.
+  it('reports a thrown string instead of crashing', () => {
+    const { content } = formatErrorResponse('boom', 'Test Step');
+    expect(content[0].text).toContain('boom');
+  });
+
+  it('reports a thrown undefined instead of crashing', () => {
+    const { content } = formatErrorResponse(undefined, 'Test Step');
+    expect(content[0].text).toContain('undefined');
+  });
+
+  // Whitespace-separated text passes the long-run collapse at any length.
+  it('caps the total length of the model-facing text', () => {
+    const { content } = formatErrorResponse(new Error('word '.repeat(20_000)), 'Test Step');
+    expect(content[0].text.length).toBeLessThanOrEqual(4000);
+    expect(content[0].text).toMatch(/truncated, \d+ chars total/);
+  });
+
+  // The collapsing pass only scans a bounded prefix, but the reply still
+  // reports the real length and says it was cut.
+  it('reports the full length of an input too large to scan', () => {
+    const { content } = formatErrorResponse(new Error('A'.repeat(200_000)), 'Test Step');
+    expect(content[0].text.length).toBeLessThanOrEqual(4000);
+    expect(content[0].text).toMatch(/truncated, \d{6} chars total/);
+  });
+
+  it('reports an Error with an empty message by its name', () => {
+    const { content } = formatErrorResponse(new TypeError(''), 'Test Step');
+    expect(content[0].text).toContain('- **Error**: TypeError');
+  });
+
+  it('reports a thrown object without a message as unknown, not [object Object]', () => {
+    const { content } = formatErrorResponse({ code: 5 }, 'Test Step');
+    expect(content[0].text).toContain('- **Error**: Unknown error');
+    expect(content[0].text).not.toContain('[object Object]');
+  });
+
+  // typeof null is 'object', which would misreport the type.
+  it('reports a thrown null as type null', () => {
+    const { content } = formatErrorResponse(null, 'Test Step');
+    expect(content[0].text).toContain('**Error Type**: null');
   });
 });
 
@@ -140,6 +206,19 @@ describe('PrintifyAPI logging', () => {
 
     expect(output).not.toContain(TOKEN);
     expect(output).toContain('API token present');
+  });
+
+  // Raw base64 is treated as a file path now, so a failed upload used to
+  // write the whole payload to stderr -- several times over.
+  it('does not flood the log with a huge upload source', async () => {
+    const payload = 'A'.repeat(50_000);
+    const output = await captureStderr(async () => {
+      const instance = new PrintifyAPI(TOKEN, '42');
+      await expect(instance.uploadImage('a.png', payload)).rejects.toThrow();
+    });
+
+    expect(output).not.toContain('A'.repeat(2_001));
+    expect(output.length).toBeLessThan(20_000);
   });
 
   it('says so when no token was supplied', async () => {

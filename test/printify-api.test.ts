@@ -122,6 +122,13 @@ describe('uploadImage source handling', () => {
       .rejects.toThrow();
   });
 
+  // A relative path used to skip ALLOWED_FILE_DIR entirely.
+  it('refuses a relative path that escapes the allowed directory', async () => {
+    const { instance, uploadImage } = api();
+    await expect(instance.uploadImage('x.png', '../outside/x.png')).rejects.toThrow(/outside the allowed directory/);
+    expect(uploadImage).not.toHaveBeenCalled();
+  });
+
   it('propagates an SDK upload failure', async () => {
     const { instance } = api({ uploads: { uploadImage: vi.fn(async () => { throw new Error('rejected by API'); }) } });
     await expect(instance.uploadImage('a.png', 'https://example.test/a.png')).rejects.toThrow(/rejected by API/);
@@ -502,6 +509,30 @@ describe('uploadImage remaining branches', () => {
     await expect(instance.uploadImage('dir.png', scratch)).rejects.toThrow();
   });
 
+  // A `data:` URL with no comma, or an empty payload after it, is malformed
+  // input, not a valid (if unusual) one -- it must not be forwarded to
+  // Printify's API as an empty or garbage `contents` field.
+  it('rejects a data URL with no comma delimiter', async () => {
+    const { instance, uploadImage } = api();
+    await expect(instance.uploadImage('bare.png', 'data:image/png;base64')).rejects.toThrow(/Invalid data URL/);
+    expect(uploadImage).not.toHaveBeenCalled();
+  });
+
+  it('rejects a data URL with an empty payload', async () => {
+    const { instance, uploadImage } = api();
+    await expect(instance.uploadImage('bare.png', 'data:image/png;base64,')).rejects.toThrow(/Invalid data URL/);
+    expect(uploadImage).not.toHaveBeenCalled();
+  });
+
+  // Without a `;base64` marker, a data URL's payload is percent-encoded text
+  // per RFC 2397, not base64 -- accepting it would forward the raw text as
+  // `contents` to Printify's API.
+  it('rejects a data URL without a ;base64 marker', async () => {
+    const { instance, uploadImage } = api();
+    await expect(instance.uploadImage('bare.png', 'data:text/plain,hello')).rejects.toThrow(/Invalid data URL/);
+    expect(uploadImage).not.toHaveBeenCalled();
+  });
+
   it('rejects a non-image file', async () => {
     fs.mkdirSync(scratch, { recursive: true });
     const f = path.join(scratch, 'notes.txt');
@@ -558,8 +589,9 @@ describe('uploadImage file validation', () => {
     const { instance } = api();
     const err = await instance.uploadImage('w.png', 'file:///C:/nope/missing.png').catch((e: Error) => e);
     // The message echoes the original source too, so assert on the resolved
-    // path the code actually tried to open.
-    expect(err.message).toContain('File not found: C:/nope/missing.png');
+    // path the code actually tried to open. Unstripped, /C:/... would be an
+    // absolute path outside the allowed directory and be refused instead.
+    expect(err.message).toContain(path.resolve('C:/nope/missing.png'));
   });
 
   it('reports a missing parent directory', async () => {

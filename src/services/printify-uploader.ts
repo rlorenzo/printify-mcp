@@ -3,7 +3,7 @@
  */
 // No need for fs and path imports
 import { PrintifyAPI, requireShop } from '../printify-api.js';
-import { describeError, formatErrorResponse, formatSuccessResponse } from '../utils/error-handler.js';
+import { describeError, describeThrownValue, formatErrorResponse, formatSuccessResponse } from '../utils/error-handler.js';
 import { getFileInfo, validateFilePath } from '../utils/file-utils.js';
 
 /**
@@ -105,13 +105,13 @@ export function determineImageSourceType(source: string): 'url' | 'file' | 'base
     return 'url';
   }
 
-  // Check if it's a file path
-  if (source.includes(':\\') || source.includes(':/') || source.startsWith('/') || source.includes('\\')) {
-    return 'file';
+  // Base64 must arrive as a data: URL. Raw base64 is indistinguishable from a
+  // relative path (JPEG base64 starts with /9j/), so everything else is a file
+  // and goes through path validation.
+  if (source.startsWith('data:')) {
+    return 'base64';
   }
-
-  // Otherwise assume it's base64
-  return 'base64';
+  return 'file';
 }
 
 /**
@@ -280,19 +280,18 @@ export async function uploadImageToPrintify(
       tips.push('Recommended resolution for JPEG/PNG files is 300 DPI');
       tips.push('Maximum file size is 20MB');
     } else {
-      tips.push('Make sure the base64 string is valid and represents an image');
+      tips.push('Make sure the data URL has the form data:<mime>;base64,<payload> and represents an image');
     }
 
     // Gather as much diagnostic information as possible
+    const { errorType, errorMessage } = describeThrownValue(error);
     const diagnosticInfo: any = {
       FileName: fileName,
       SourceType: sourceTypeLabel,
       Source: sourceType === 'url' ? source : (sourceType === 'file' ? source : `${source.substring(0, 30)}...`),
       CurrentShop: printifyClient.getCurrentShop(),
-      ErrorType: error.constructor.name,
-      ErrorStack: error.stack,
-      ErrorMessage: error.message,
-      CurrentWorkingDirectory: process.cwd(),
+      ErrorType: errorType,
+      ErrorMessage: errorMessage,
       NodeVersion: process.version,
       Platform: process.platform,
       // Add Printify client information
@@ -306,12 +305,11 @@ export async function uploadImageToPrintify(
       await addFileDiagnostics(diagnosticInfo, source);
     }
 
-    // Add error details if available
-    if (error.response) {
+    // Status only: the response body and headers stay in the stderr log
+    // (describeError above), not in text returned to the model.
+    if (error?.response) {
       diagnosticInfo.PrintifyResponseStatus = error.response.status;
       diagnosticInfo.PrintifyResponseStatusText = error.response.statusText;
-      diagnosticInfo.PrintifyResponseData = error.response.data;
-      diagnosticInfo.PrintifyResponseHeaders = error.response.headers;
     }
 
     return {
