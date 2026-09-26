@@ -130,6 +130,18 @@ describe('uploadImageToPrintify diagnostics', () => {
     }
   );
 
+  // Raw base64 is classified as a file path now, so a failed upload echoes it
+  // back as the source -- several times over, via the error message too.
+  it('does not echo a long raw source back to the model', async () => {
+    const payload = 'A'.repeat(50_000);
+    const r = await uploadImageToPrintify(client(), 'a.png', payload);
+    expect(r.success).toBe(false);
+    const text = (r.errorResponse as any).content[0].text as string;
+    expect(text).not.toContain('A'.repeat(201));
+    expect(text).toContain('(50000 chars)');
+    expect(text.length).toBeLessThan(5000);
+  });
+
   it('reports file diagnostics when a file upload fails', async () => {
     const f = await pngFile('fails.png');
     const c = client({ uploadImage: vi.fn(async () => { throw new Error('nope'); }) });

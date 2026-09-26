@@ -112,6 +112,20 @@ export function describeThrownValue(error: unknown): { errorType: string; errorM
 }
 
 /**
+ * Longest unbroken run of non-whitespace an error response passes through
+ * whole. A caller-supplied source (a raw base64 payload taken for a file path,
+ * say) is echoed by several messages on the way here; collapsing overlong runs
+ * at this one choke point keeps every echo from flooding the model's context.
+ */
+const MAX_UNBROKEN_RUN = 200;
+const RUN_PREVIEW = 60;
+
+function collapseLongRuns(text: string): string {
+  return text.replace(new RegExp(`\\S{${MAX_UNBROKEN_RUN + 1},}`, 'g'),
+    run => `${run.slice(0, RUN_PREVIEW)}... (${run.length} chars)`);
+}
+
+/**
  * Format an error response for tool output
  */
 export function formatErrorResponse(
@@ -164,7 +178,7 @@ export function formatErrorResponse(
   }
   
   return {
-    content: [{ type: "text", text }],
+    content: [{ type: "text", text: collapseLongRuns(text) }],
     isError: true
   };
 }
