@@ -128,8 +128,8 @@ export function validateFilePath(filePath: string, operation: 'read' | 'write'):
     // quote a preview: it cannot flood the log, and the reason after it
     // survives any cap on the reply.
 
-    // Operator log: full detail -- the resolved path and the base directory,
-    // including the server's absolute working directory.
+    // Operator log: a preview of the resolved path plus the full base
+    // directory, including the server's absolute working directory.
     console.error(describeError(new Error(
       `File ${operation} denied: "${previewText(resolved)}" is outside the allowed directory "${baseDir}".`
     )));

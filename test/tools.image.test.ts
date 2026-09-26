@@ -258,3 +258,23 @@ describe('generate_image', () => {
     expect(res.isError).toBe(true);
   });
 });
+
+describe('upload_image', () => {
+  // Raw base64 is classified as a file path, so the attempt log must bound it
+  // rather than print the whole payload to stderr.
+  it('does not log a huge source in full', async () => {
+    const lines: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...args: any[]) => { lines.push(args.join(' ')); });
+    try {
+      const payload = 'A'.repeat(50_000);
+      // The failed read runs the error path's diagnostics, which need these.
+      const printifyClient = fakePrintify({ getCurrentShopId: () => '1', getAvailableShops: () => [] });
+      await harness({ printifyClient }).call('upload_image', { fileName: 'a.png', url: payload });
+    } finally {
+      spy.mockRestore();
+    }
+    const output = lines.join('\n');
+    expect(output).toContain('Attempting to upload image');
+    expect(output).not.toContain('A'.repeat(2_001));
+  });
+});

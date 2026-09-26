@@ -15,7 +15,7 @@ import { mergeGenerationOptions } from "./generation-options.js";
 import { stageOnImgbb, requiresImgbb, hasImgbbKey } from "./services/imgbb.js";
 import { saveDebugCopy } from "./services/image-format.js";
 import { generateImage } from "./services/image-generator.js";
-import { boundErrorText, describeError, formatSuccessResponse } from "./utils/error-handler.js";
+import { boundErrorText, describeError, formatSuccessResponse, previewText } from "./utils/error-handler.js";
 import { ensureDirectoryExists, validateFilePath } from "./utils/file-utils.js";
 import * as shops from "./services/printify-shops.js";
 import * as products from "./services/printify-products.js";
@@ -465,9 +465,8 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
 
       // Log the attempt with limited information for privacy
       const sourceType = determineImageSourceType(url);
-      const sourcePreview = sourceType === 'url' ? url.substring(0, 30) + '...' :
-                           sourceType === 'file' ? url : // Show full file path
-                           url.substring(0, 30) + '...';
+      // A "file" source may be raw base64 of any length, so it is bounded too.
+      const sourcePreview = sourceType === 'file' ? previewText(url) : url.substring(0, 30) + '...';
 
       console.error(`Attempting to upload image: ${fileName} from ${sourceType} source: ${sourcePreview}`);
 
