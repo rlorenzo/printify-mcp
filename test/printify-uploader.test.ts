@@ -155,6 +155,17 @@ describe('uploadImageToPrintify diagnostics', () => {
     expect(text.length).toBeLessThan(3000);
   });
 
+  // The diagnostics go back to the model; a resolved absolute path would
+  // reveal the server's working directory for a relative input.
+  it('keeps the working directory out of file diagnostics', async () => {
+    await pngFile('rel.png');
+    const c = client({ uploadImage: vi.fn(async () => { throw new Error('nope'); }) });
+    const r = await uploadImageToPrintify(c, 'rel.png', path.join('.tmp-upl-test', 'rel.png'));
+    const text = JSON.stringify(r.errorResponse);
+    expect(text).toContain('FileExists');
+    expect(text).not.toContain(process.cwd());
+  });
+
   it('reports file diagnostics when a file upload fails', async () => {
     const f = await pngFile('fails.png');
     const c = client({ uploadImage: vi.fn(async () => { throw new Error('nope'); }) });

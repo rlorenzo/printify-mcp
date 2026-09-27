@@ -113,3 +113,11 @@ describe('tool surface', () => {
     expect(harness().names()).toHaveLength(19);
   });
 });
+
+describe('test harness', () => {
+  // A misspelled tool name should fail loudly and say so, not as a TypeError
+  // from reading the schema of a tool that isn't there.
+  it('rejects an unknown tool name in callParsed', async () => {
+    await expect(harness({}).callParsed('no_such_tool')).rejects.toThrow(/no such tool: no_such_tool/);
+  });
+});

@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { PrintifyAPI, requireShop } from '../printify-api.js';
 import { describeError, formatErrorResponse, formatSuccessResponse, previewText, TIPS } from '../utils/error-handler.js';
-import { getFileInfo, validateFilePath } from '../utils/file-utils.js';
+import { getFileInfo, openConfined, validateFilePath } from '../utils/file-utils.js';
 import { saveDebugCopy } from './image-format.js';
 
 /** Strip a file:// scheme (keeping the path's own leading slash). */
@@ -25,40 +25,38 @@ function normalizeFilePath(filePath: string): string {
 }
 
 /**
- * Attach file diagnostics for a failed file upload. Only paths that pass read
- * validation are inspected, so a rejected path's metadata is never disclosed.
+ * Attach file diagnostics for a failed file upload. The file is inspected only
+ * through openConfined's descriptor, so a rejected path's metadata is never
+ * disclosed and a path swapped after validation is never followed. No
+ * absolute path is reported: the details are returned to the model, and the
+ * resolved path would reveal the server's working directory.
  */
 async function addFileDiagnostics(diagnosticInfo: any, source: string): Promise<void> {
-  let filePath: string;
+  let handle: ReturnType<typeof openConfined>;
   try {
-    filePath = validateFilePath(normalizeFilePath(source), 'read');
-  } catch {
-    diagnosticInfo.PathRejected = 'Path failed validation; file diagnostics were skipped';
+    handle = openConfined(normalizeFilePath(source));
+  } catch (error: any) {
+    if (error?.cause?.code === 'ENOENT') {
+      diagnosticInfo.FileExists = false;
+      diagnosticInfo.FileSize = 'N/A';
+    } else {
+      diagnosticInfo.PathRejected = 'Path failed validation; file diagnostics were skipped';
+    }
     return;
   }
 
-  const fileInfo = getFileInfo(filePath);
-  diagnosticInfo.FileExists = fileInfo.exists;
-  diagnosticInfo.FileSize = fileInfo.exists ? fileInfo.size + ' bytes' : 'N/A';
-  if (!fileInfo.exists) return;
-
+  const { fd, stats } = handle;
   try {
-    const stats = fs.statSync(filePath);
+    diagnosticInfo.FileExists = true;
+    diagnosticInfo.FileSize = stats.size + ' bytes';
     diagnosticInfo.FileCreated = stats.birthtime;
     diagnosticInfo.FileModified = stats.mtime;
     diagnosticInfo.FilePermissions = stats.mode.toString(8);
-    diagnosticInfo.AbsolutePath = path.resolve(filePath);
 
     try {
       const buffer = Buffer.alloc(10);
-      // Closed in `finally`: readSync throws EISDIR on a directory.
-      const fd = fs.openSync(filePath, 'r');
-      let bytesRead: number;
-      try {
-        bytesRead = fs.readSync(fd, buffer, 0, 10, 0);
-      } finally {
-        fs.closeSync(fd);
-      }
+      // Throws EISDIR on a directory; the descriptor is closed below either way.
+      const bytesRead = fs.readSync(fd, buffer, 0, 10, 0);
       diagnosticInfo.FileReadable = true;
       diagnosticInfo.BytesRead = bytesRead;
       diagnosticInfo.FileFirstBytes = buffer.toString('hex').substring(0, 20);
@@ -70,8 +68,8 @@ async function addFileDiagnostics(diagnosticInfo: any, source: string): Promise<
       diagnosticInfo.FileReadable = false;
       diagnosticInfo.FileReadError = readError.message || String(readError);
     }
-  } catch (statError: any) {
-    diagnosticInfo.FileStatError = statError.message || String(statError);
+  } finally {
+    fs.closeSync(fd);
   }
 }
 
@@ -104,13 +102,14 @@ export function determineImageSourceType(source: string): 'url' | 'file' | 'base
  */
 async function verifyFileReadable(filePath: string): Promise<void> {
   try {
-    // Inspect through one descriptor rather than separate path lookups, so the
-    // file cannot be swapped between check and use.
+    // Inspect through one confined descriptor rather than separate path
+    // lookups, so the file cannot be swapped between check and use -- the
+    // debug copy below writes its bytes out, so it must be the file checked.
     let fd: number;
     try {
-      fd = fs.openSync(filePath, 'r');
+      ({ fd } = openConfined(filePath));
     } catch (openError: any) {
-      if (openError?.code === 'ENOENT') {
+      if (openError?.cause?.code === 'ENOENT') {
         console.error(`ERROR: File does not exist at upload time: ${filePath}`);
         throw new Error(`File does not exist at upload time: ${filePath}`, { cause: openError });
       }
