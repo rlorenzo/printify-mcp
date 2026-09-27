@@ -124,9 +124,19 @@ async function verifyFileReadable(filePath: string, shown: string): Promise<void
         console.error(`- Read test failed: ${readError.message || readError}`);
       }
 
-      // Read from the open descriptor rather than re-opening by name.
+      // Read from the open descriptor rather than re-opening by name. The
+      // copy is best-effort: a failed read (EISDIR on a directory, say) must
+      // not fail an upload that would go ahead with debugging off.
       if (process.env.PRINTIFY_MCP_DEBUG) {
-        await saveDebugCopy(fs.readFileSync(fd), `upload_${path.basename(filePath)}`);
+        let data: Buffer | undefined;
+        try {
+          data = fs.readFileSync(fd);
+        } catch (readError) {
+          console.error('Skipping debug copy; the file could not be read:', describeError(readError));
+        }
+        if (data) {
+          await saveDebugCopy(data, `upload_${path.basename(filePath)}`);
+        }
       }
     } finally {
       fs.closeSync(fd);

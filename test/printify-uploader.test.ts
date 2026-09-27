@@ -250,6 +250,24 @@ describe('uploadImageToPrintify diagnostics', () => {
     }
   });
 
+  // The debug copy is best-effort: its read failing (EISDIR here) must not
+  // stop an upload that goes ahead with debugging off.
+  it('does not fail the upload when the debug copy cannot be read', async () => {
+    fs.mkdirSync(scratch, { recursive: true });
+    const off = client();
+    await uploadImageToPrintify(off, 'dir.png', scratch);
+    expect(off.uploadImage).toHaveBeenCalledTimes(1);
+
+    const on = client();
+    process.env.PRINTIFY_MCP_DEBUG = '1';
+    try {
+      await uploadImageToPrintify(on, 'dir.png', scratch);
+    } finally {
+      delete process.env.PRINTIFY_MCP_DEBUG;
+    }
+    expect(on.uploadImage).toHaveBeenCalledTimes(1);
+  });
+
   // readSync throws EISDIR here, which previously skipped closeSync and leaked
   // the descriptor on every such upload.
   it('closes the descriptor when the diagnostic read fails', async () => {
