@@ -2,7 +2,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import Printify from 'printify-sdk-js';
 import sharp from 'sharp';
-import { describeError } from './utils/error-handler.js';
+import { describeError, previewText } from './utils/error-handler.js';
+import { readConfinedFile } from './utils/file-utils.js';
 import { applyOutputFormat, mimeTypeFor } from './services/image-format.js';
 
 // Shop interface
@@ -614,9 +615,9 @@ export class PrintifyAPI {
       }
 
       // If it's a file path, try to read the file and convert to base64
-      if (source.startsWith('file://') || source.includes(':\\') || source.includes(':/') || !source.startsWith('data:')) {
+      if (!source.startsWith('data:')) {
         try {
-          console.error(`Attempting to read file from: ${source}`);
+          console.error(`Attempting to read file from: ${previewText(source)}`);
 
           // Handle file:// protocol
           let filePath = source;
@@ -632,49 +633,20 @@ export class PrintifyAPI {
             filePath = filePath.substring(1);
           }
 
-          console.error(`Normalized file path: ${filePath}`);
-
-          // Check if file exists
-          if (!fs.existsSync(filePath)) {
-            const error = new Error(`File not found: ${filePath}`);
-            console.error('File not found error:', describeError(error));
-            console.error('Current working directory:', process.cwd());
-            console.error('File path type:', typeof filePath);
-            console.error('Absolute path check:', path.isAbsolute(filePath) ? 'Absolute' : 'Relative');
-
-            // Try to list the directory contents if possible
-            try {
-              const dir = path.dirname(filePath);
-              if (fs.existsSync(dir)) {
-                console.error('Directory exists. Contents:', fs.readdirSync(dir));
-              } else {
-                console.error('Parent directory does not exist:', dir);
-              }
-            } catch (dirError) {
-              console.error('Error checking directory:', describeError(dirError));
-            }
-
-            throw error;
-          }
-
-          // Get file stats
-          const stats = fs.statSync(filePath);
-          console.error(`File size: ${stats.size} bytes`);
-
-          if (stats.size === 0) {
-            throw new Error(`File is empty: ${filePath}`);
-          }
-
-          if (stats.size > 10 * 1024 * 1024) { // 10MB limit
-            throw new Error(`File is too large (${Math.round(stats.size / (1024 * 1024))}MB). Maximum size is 10MB.`);
-          }
+          // Every local read ends here, so this is the guard that holds even
+          // for callers that skip uploadImageToPrintify's own validation. The
+          // file is opened once and read through that descriptor; see
+          // readConfinedFile for why the path is never opened by name again.
+          const { resolved, data } = readConfinedFile(filePath, 10 * 1024 * 1024);
+          filePath = resolved;
+          console.error(`Read ${data.length} bytes from ${previewText(filePath)}`);
 
           // Process the image with Sharp
           console.error('Processing image with Sharp before uploading...');
 
           const ext = path.extname(filePath).toLowerCase();
           const outputFormat = ext === '.jpg' || ext === '.jpeg' ? 'jpeg' : 'png';
-          const buffer = await applyOutputFormat(sharp(filePath), outputFormat).toBuffer();
+          const buffer = await applyOutputFormat(sharp(data), outputFormat).toBuffer();
           console.error(`Image processed successfully: ${buffer.length} bytes`);
           const mimeType = mimeTypeFor(outputFormat);
 
@@ -701,26 +673,30 @@ export class PrintifyAPI {
           const errorMessage = error.message || 'Unknown error';
 
           // Create a detailed error message with troubleshooting information
-          let detailedError = `Failed to process file ${source}: ${errorMessage}\n\n`;
+          let detailedError = `Failed to process file ${previewText(source)}: ${errorMessage}\n\n`;
           detailedError += 'Troubleshooting steps:\n';
           detailedError += '1. Check if the file exists and is readable\n';
           detailedError += '2. Make sure the file is a valid image (PNG, JPEG, etc.)\n';
-          detailedError += '3. Try using a URL or base64 encoded string instead\n';
+          detailedError += '3. Try using a URL or a data URL (data:<mime>;base64,<payload>) instead\n';
           detailedError += '\nFile processing details:\n';
-          detailedError += `- Attempted to read from: ${source}\n`;
+          detailedError += `- Attempted to read from: ${previewText(source)}\n`;
 
           throw new Error(detailedError, { cause: error });
         }
-      } else if (source.startsWith('data:image/')) {
-        // If source is base64 data with data URL prefix
-        // Extract the base64 content
-        const base64Content = source.split(',')[1];
+      } else {
+        // data: URL: contents must be `;base64,` encoded -- a data URL without
+        // that marker carries percent-encoded text per RFC 2397, not base64,
+        // and forwarding it as `contents` would send Printify garbage. This
+        // also rejects a missing comma or an empty payload in one check.
+        const match = /^data:[^,]*;base64,(.+)$/s.exec(source);
+        if (!match) {
+          throw new Error(
+            `Invalid data URL for ${fileName}: expected "data:<mime>;base64,<payload>" with a non-empty base64 payload.`
+          );
+        }
+        const base64Content = match[1];
         console.error(`Uploading image with base64 data from data URL (length: ${base64Content.length})`);
         return await this.client.uploads.uploadImage({ file_name: fileName, contents: base64Content });
-      } else {
-        // Otherwise, assume it's a base64 encoded string without prefix
-        console.error(`Uploading image with base64 data (length: ${source.length})`);
-        return await this.client.uploads.uploadImage({ file_name: fileName, contents: source });
       }
     } catch (error: any) {
       console.error('Error uploading image:', describeError(error));
