@@ -1,44 +1,22 @@
-=== DETAILED DOCUMENTATION: VARIANTS ===
+# Variants
 
-Variants are the specific product options available for a blueprint from a specific print provider.
+A variant is one purchasable option, such as a color and size combination, for a blueprint from a specific print provider. Each has an ID and a cost (what you pay the provider). You set the retail price.
 
-KEY POINTS ABOUT VARIANTS:
-- Variants typically include combinations of colors, sizes, and other attributes
-- Each variant has a unique ID that you'll need when creating a product
-- Variants have a cost (what you pay to the print provider)
-- You set a retail price for each variant (what your customers will pay)
-- You can enable or disable specific variants
+```javascript
+get_variants({ blueprintId: "12", printProviderId: "29", page: 1, limit: 50 })
+```
 
-HOW TO GET VARIANTS:
-- First choose a blueprint ID and print provider ID
-- Then use get_variants({ blueprintId: "12", printProviderId: "29" })
-- The response includes an array of variant objects
-- Each variant has an ID, title, options, and cost
+Example: `{ "id": 18100, "title": "Black / S", "options": { "color": "Black", "size": "S" } }`
 
-EXAMPLE VARIANT OBJECT:
-{
-  "id": 18100,
-  "title": "Black / S",
-  "options": {
-    "color": "Black",
-    "size": "S"
-  },
-  "cost": 1992  // $19.92 - what you pay to the print provider
-}
+The response also lists the available placeholder positions (front, back, ...).
 
-HOW TO USE VARIANTS WHEN CREATING A PRODUCT:
-- Include an array of variant objects with your pricing
-- Each variant object needs:
-  * variantId: The ID of the variant
-  * price: The retail price in cents (e.g., 2499 for $24.99)
-  * isEnabled: (Optional) Whether the variant is enabled (defaults to true)
+In `create_product`, list the variants to sell with prices in cents:
 
-EXAMPLE VARIANTS ARRAY FOR PRODUCT CREATION:
-[
-  { "variantId": 18100, "price": 2499 },  // Black / S for $24.99
-  { "variantId": 18101, "price": 2499 },  // Black / M for $24.99
-  { "variantId": 18102, "price": 2499 }   // Black / L for $24.99
+```javascript
+variants: [
+  { variantId: 18100, price: 2499 },                     // $24.99
+  { variantId: 18101, price: 2499, isEnabled: false }    // isEnabled defaults to true
 ]
+```
 
-NEXT STEP AFTER CHOOSING VARIANTS:
-- Upload images for your product using upload_image or generate_and_upload_image
+**Next:** upload artwork with `upload_image` or `generate_and_upload_image`.

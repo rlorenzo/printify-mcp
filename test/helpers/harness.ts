@@ -30,6 +30,12 @@ export function harness(ctx: Partial<PrintifyContext> = {}) {
       const tool = tools[name];
       if (!tool) throw new Error(`no such tool: ${name}`);
       return await tool.handler(args, { signal: new AbortController().signal } as any);
+    },
+    /** Like `call`, but parses `args` through the tool's schema first, as the runtime does. */
+    async callParsed(name: string, args: Record<string, any> = {}) {
+      const tool = tools[name];
+      if (!tool) throw new Error(`no such tool: ${name}`);
+      return await this.call(name, tool.inputSchema.parse(args));
     }
   };
 }

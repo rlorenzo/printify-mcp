@@ -1,76 +1,46 @@
 /**
- * Printify upload service for Printify MCP
+ * Printify upload service.
  */
-// No need for fs and path imports
-import { PrintifyAPI, requireShop } from '../printify-api.js';
-import { describeError, describeThrownValue, formatErrorResponse, formatSuccessResponse, previewText } from '../utils/error-handler.js';
-import { getFileInfo, validateFilePath } from '../utils/file-utils.js';
+import * as fs from 'fs';
+import * as path from 'path';
+import { MAX_UPLOAD_BYTES, PrintifyAPI, requireShop } from '../printify-api.js';
+import { describeError, formatErrorResponse, formatSuccessResponse, previewText, TIPS } from '../utils/error-handler.js';
+import { fileTooLargeMessage, normalizeFileUri, openConfined, validateFilePath } from '../utils/file-utils.js';
+import { saveDebugCopy } from './image-format.js';
 
 /**
- * Normalize a file path
- */
-function normalizeFilePath(filePath: string): string {
-  let normalizedPath = filePath;
-
-  // Handle file:// URLs. Strip only the scheme: file:///Users/x is the
-  // absolute path /Users/x, so the third slash must survive.
-  if (normalizedPath.startsWith('file://')) {
-    normalizedPath = normalizedPath.slice('file://'.length);
-  }
-
-  // Handle leading slash on Windows
-  if (process.platform === 'win32' && normalizedPath.startsWith('/')) {
-    normalizedPath = normalizedPath.substring(1);
-  }
-
-  return normalizedPath;
-}
-
-/**
- * Attach file diagnostics for a failed file upload.
- *
- * Only a path that passes read validation is inspected. Statting or reading a
- * rejected path would let a caller-supplied source such as `/etc/passwd`
- * disclose file metadata and leading bytes through the error report, so a
- * refusal is recorded and nothing is touched on disk.
+ * Attach file diagnostics for a failed file upload. The file is inspected only
+ * through openConfined's descriptor, so a rejected path's metadata is never
+ * disclosed and a path swapped after validation is never followed. No
+ * absolute path is reported: the details are returned to the model, and the
+ * resolved path would reveal the server's working directory.
  */
 async function addFileDiagnostics(diagnosticInfo: any, source: string): Promise<void> {
-  let filePath: string;
+  let handle: ReturnType<typeof openConfined>;
   try {
-    filePath = validateFilePath(normalizeFilePath(source), 'read');
-  } catch {
-    diagnosticInfo.PathRejected = 'Path failed validation; file diagnostics were skipped';
+    handle = openConfined(normalizeFileUri(source));
+  } catch (error: any) {
+    if (error?.cause?.code === 'ENOENT') {
+      diagnosticInfo.FileExists = false;
+      diagnosticInfo.FileSize = 'N/A';
+    } else {
+      diagnosticInfo.PathRejected = 'File could not be opened safely; file diagnostics were skipped';
+    }
     return;
   }
 
-  const fileInfo = getFileInfo(filePath);
-  diagnosticInfo.FileExists = fileInfo.exists;
-  diagnosticInfo.FileSize = fileInfo.exists ? fileInfo.size + ' bytes' : 'N/A';
-  if (!fileInfo.exists) return;
-
+  const { fd, stats } = handle;
   try {
-    const [fsModule, pathModule] = await Promise.all([import('fs'), import('path')]);
-    const fs = fsModule.default || fsModule;
-    const path = pathModule.default || pathModule;
-
-    const stats = fs.statSync(filePath);
+    diagnosticInfo.FileExists = true;
+    diagnosticInfo.FileSize = stats.size + ' bytes';
     diagnosticInfo.FileCreated = stats.birthtime;
     diagnosticInfo.FileModified = stats.mtime;
     diagnosticInfo.FilePermissions = stats.mode.toString(8);
-    diagnosticInfo.AbsolutePath = path.resolve(filePath);
 
     try {
       const buffer = Buffer.alloc(10);
-      // The descriptor is closed in `finally`: readSync throws EISDIR on a
-      // directory, and leaking a descriptor on every such upload would
-      // eventually exhaust the process's limit.
-      const fd = fs.openSync(filePath, 'r');
-      let bytesRead: number;
-      try {
-        bytesRead = fs.readSync(fd, buffer, 0, 10, 0);
-      } finally {
-        fs.closeSync(fd);
-      }
+      // Throws EISDIR on a directory; the descriptor is closed below either way.
+      const bytesRead = fs.readSync(fd, buffer, 0, 10, 0);
       diagnosticInfo.FileReadable = true;
       diagnosticInfo.BytesRead = bytesRead;
       diagnosticInfo.FileFirstBytes = buffer.toString('hex').substring(0, 20);
@@ -82,8 +52,8 @@ async function addFileDiagnostics(diagnosticInfo: any, source: string): Promise<
       diagnosticInfo.FileReadable = false;
       diagnosticInfo.FileReadError = readError.message || String(readError);
     }
-  } catch (statError: any) {
-    diagnosticInfo.FileStatError = statError.message || String(statError);
+  } finally {
+    fs.closeSync(fd);
   }
 }
 
@@ -96,15 +66,11 @@ function detectImageType(hexSignature: string): string {
   return 'unknown';
 }
 
-/**
- * Determine the source type of an image input
- */
+/** Classify an image source string. */
 export function determineImageSourceType(source: string): 'url' | 'file' | 'base64' {
-  // Check if it's a URL
   if (source.startsWith('http://') || source.startsWith('https://')) {
     return 'url';
   }
-
   // Base64 must arrive as a data: URL. Raw base64 is indistinguishable from a
   // relative path (JPEG base64 starts with /9j/), so everything else is a file
   // and goes through path validation.
@@ -115,38 +81,33 @@ export function determineImageSourceType(source: string): 'url' | 'file' | 'base
 }
 
 /**
- * Confirm a file is present and readable before handing it to the SDK, logging
- * what was observed.
- *
- * Diagnostics only, plus the one throw that matters: an upload of a file that
- * vanished between validation and use fails here with a clear message rather
- * than inside the SDK.
+ * Confirm a file is present and readable before upload, logging what was seen,
+ * so a file that vanished since validation fails with a clear message.
  */
-async function verifyFileReadable(filePath: string): Promise<void> {
+async function verifyFileReadable(filePath: string, shown: string): Promise<void> {
   try {
-    const fs = await import('fs');
-    const path = await import('path');
-
-    // Open once and inspect through the descriptor. Checking existence,
-    // permissions and readability as separate path lookups re-resolves the name
-    // each time, so the file could be swapped between the check and the use
-    // (TOCTOU). A single open gives one handle to one inode: a missing file
-    // raises ENOENT and an unreadable one EACCES, which is the same information
-    // the separate checks produced.
+    // Inspect through one confined descriptor rather than separate path
+    // lookups, so the file cannot be swapped between check and use -- the
+    // debug copy below writes its bytes out, so it must be the file checked.
     let fd: number;
+    let stats: fs.Stats;
     try {
-      fd = fs.openSync(filePath, 'r');
+      ({ fd, stats } = openConfined(filePath));
     } catch (openError: any) {
-      if (openError?.code === 'ENOENT') {
-        console.error(`ERROR: File does not exist at upload time: ${filePath}`);
-        throw new Error(`File does not exist at upload time: ${filePath}`, { cause: openError });
+      if (openError?.cause?.code === 'ENOENT') {
+        console.error(`ERROR: File not found: ${filePath}`);
+        throw new Error(`File not found: ${shown}`, { cause: openError });
       }
       console.error(`ERROR: File is not readable at upload time: ${filePath}`);
-      throw new Error(`File is not readable at upload time: ${filePath}`, { cause: openError });
+      throw new Error(`File is not readable at upload time: ${shown}`, { cause: openError });
     }
 
     try {
-      const stats = fs.fstatSync(fd);
+      // Same limit PrintifyAPI.uploadFile enforces, checked on the open file
+      // before the debug copy below reads all of it into memory.
+      if (stats.size > MAX_UPLOAD_BYTES) {
+        throw new Error(fileTooLargeMessage(stats.size, MAX_UPLOAD_BYTES));
+      }
       console.error(`File verification before upload:`);
       console.error(`- Path: ${filePath}`);
       console.error(`- Absolute path: ${path.resolve(filePath)}`);
@@ -163,18 +124,18 @@ async function verifyFileReadable(filePath: string): Promise<void> {
         console.error(`- Read test failed: ${readError.message || readError}`);
       }
 
-      // Copy of every uploaded file, written only when explicitly enabled.
+      // Read from the open descriptor rather than re-opening by name. The
+      // copy is best-effort: a failed read (EISDIR on a directory, say) must
+      // not fail an upload that would go ahead with debugging off.
       if (process.env.PRINTIFY_MCP_DEBUG) {
+        let data: Buffer | undefined;
         try {
-          const debugDir = path.join(process.cwd(), 'debug');
-          // recursive:true is idempotent, so no existence check is needed.
-          fs.mkdirSync(debugDir, { recursive: true });
-          const debugFilePath = path.join(debugDir, `upload_${Date.now()}_${path.basename(filePath)}`);
-          // Written from the open descriptor rather than re-opening by name.
-          fs.writeFileSync(debugFilePath, fs.readFileSync(fd));
-          console.error(`- Debug copy: ${debugFilePath}`);
-        } catch (copyError: any) {
-          console.error(`- Debug copy failed: ${copyError.message || copyError}`);
+          data = fs.readFileSync(fd);
+        } catch (readError) {
+          console.error('Skipping debug copy; the file could not be read:', describeError(readError));
+        }
+        if (data) {
+          await saveDebugCopy(data, `upload_${path.basename(filePath)}`);
         }
       }
     } finally {
@@ -186,9 +147,7 @@ async function verifyFileReadable(filePath: string): Promise<void> {
   }
 }
 
-/**
- * Upload an image to Printify from various sources
- */
+/** Upload an image to Printify from a URL, local file, or base64 string. */
 export async function uploadImageToPrintify(
   printifyClient: PrintifyAPI,
   fileName: string,
@@ -197,39 +156,27 @@ export async function uploadImageToPrintify(
   try {
     requireShop(printifyClient);
 
-    // Determine the source type
     const sourceType = determineImageSourceType(source);
     console.error(`Uploading image to Printify from ${sourceType} source`);
 
     let image;
 
     if (sourceType === 'file') {
-      // Handle file upload
-      const filePath = validateFilePath(normalizeFilePath(source), 'read');
-
-      // Validate file exists
-      const fileInfo = getFileInfo(filePath);
-      if (!fileInfo.exists) {
-        throw new Error(`File not found: ${filePath}`);
-      }
+      const requested = normalizeFileUri(source);
+      // Validated here to fail fast; every later step re-validates for itself.
+      // Those steps get `requested`, not the resolved path: their errors quote
+      // the path they were given and reach the model, and the resolved form
+      // of a relative path reveals the server's working directory.
+      const filePath = validateFilePath(requested, 'read');
+      const shown = previewText(requested);
 
       console.error(`Uploading file to Printify: ${filePath}`);
-      console.error(`File size: ${fileInfo.size} bytes`);
+      await verifyFileReadable(requested, shown);
 
-      // Check file size limits
-      if (fileInfo.size && fileInfo.size > 20 * 1024 * 1024) { // 20MB limit
-        throw new Error(`File is too large (${Math.round(fileInfo.size / (1024 * 1024))}MB). Maximum size is 20MB.`);
-      }
-
-      await verifyFileReadable(filePath);
-
-      // Upload to Printify
-      console.error(`Attempting to upload file to Printify: ${filePath}`);
-      image = await printifyClient.uploadImage(fileName, filePath);
+      image = await printifyClient.uploadImage(fileName, requested);
       console.error(`Upload successful! Image ID: ${image.id}`);
       console.error(`Preview URL: ${image.preview_url}`);
     } else {
-      // For URLs and base64 strings, upload directly
       image = await printifyClient.uploadImage(fileName, source);
     }
 
@@ -258,17 +205,12 @@ export async function uploadImageToPrintify(
   } catch (error: any) {
     console.error('Error uploading image to Printify:', describeError(error));
 
-    // Determine source type for better error messages
     const sourceType = determineImageSourceType(source);
     const sourceTypeLabel = sourceType === 'url' ? 'URL' :
                            sourceType === 'file' ? 'file path' :
                            'base64 string';
 
-    // Create appropriate troubleshooting tips based on source type
-    const tips = [
-      'Check that your Printify API key is valid',
-      'Ensure your Printify account is properly connected'
-    ];
+    const tips: string[] = [TIPS.apiKey, TIPS.connected];
 
     if (sourceType === 'url') {
       tips.push('Make sure the URL is publicly accessible and points directly to an image file');
@@ -278,42 +220,26 @@ export async function uploadImageToPrintify(
       tips.push('Check that the path is correct and includes the full path to the file');
       tips.push('The file must be a valid image format (PNG, JPEG, SVG)');
       tips.push('Recommended resolution for JPEG/PNG files is 300 DPI');
-      tips.push('Maximum file size is 20MB');
+      tips.push(`Maximum file size is ${MAX_UPLOAD_BYTES / (1024 * 1024)}MB`);
     } else {
       tips.push('Make sure the data URL has the form data:<mime>;base64,<payload> and represents an image');
     }
 
-    // Gather as much diagnostic information as possible
-    const { errorType, errorMessage } = describeThrownValue(error);
+    // Error type, message, and API status are added by formatErrorResponse.
     const diagnosticInfo: any = {
       FileName: fileName,
       SourceType: sourceTypeLabel,
-      // Bounded before it ever reaches the diagnostic object: an unbounded
-      // caller-supplied source (a huge base64 payload, say) embedded here in
-      // full would still cost the memory/CPU to build that string even
-      // though formatErrorResponse truncates the final text later.
+      // Bounded here: the source can be an arbitrarily large payload.
       Source: previewText(source),
       CurrentShop: printifyClient.getCurrentShop(),
-      ErrorType: errorType,
-      ErrorMessage: errorMessage,
       NodeVersion: process.version,
       Platform: process.platform,
-      // Add Printify client information
-      PrintifyClientInitialized: !!printifyClient,
       PrintifyShopId: printifyClient.getCurrentShopId(),
       PrintifyAvailableShops: printifyClient.getAvailableShops().length
     };
 
-    // Add file-specific diagnostics if it's a file
     if (sourceType === 'file') {
       await addFileDiagnostics(diagnosticInfo, source);
-    }
-
-    // Status only: the response body and headers stay in the stderr log
-    // (describeError above), not in text returned to the model.
-    if (error?.response) {
-      diagnosticInfo.PrintifyResponseStatus = error.response.status;
-      diagnosticInfo.PrintifyResponseStatusText = error.response.statusText;
     }
 
     return {

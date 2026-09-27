@@ -580,7 +580,10 @@ describe('uploadImage file validation', () => {
     const f = path.join(scratch, 'huge.png');
     fs.writeFileSync(f, Buffer.alloc(10 * 1024 * 1024 + 1, 1));
     const { instance } = api();
-    await expect(instance.uploadImage('huge.png', f)).rejects.toThrow(/too large/);
+    const err = await instance.uploadImage('huge.png', f).catch((e: Error) => e);
+    expect((err.cause as Error).message).toBe(
+      'File is too large (10485761 bytes). Maximum size is 10485760 bytes (10MB).'
+    );
   });
 
   // A Windows file:// URI carries its drive letter behind a leading slash,
@@ -588,10 +591,31 @@ describe('uploadImage file validation', () => {
   it('strips the leading slash only from a /C:/ style path', async () => {
     const { instance } = api();
     const err = await instance.uploadImage('w.png', 'file:///C:/nope/missing.png').catch((e: Error) => e);
-    // The message echoes the original source too, so assert on the resolved
-    // path the code actually tried to open. Unstripped, /C:/... would be an
-    // absolute path outside the allowed directory and be refused instead.
-    expect(err.message).toContain(path.resolve('C:/nope/missing.png'));
+    // Either way the slash is gone: the path is quoted as C:/..., never /C:/...
+    if (path.isAbsolute('C:/nope/missing.png')) {
+      // Windows: C:/... is an absolute path outside the allowed directory.
+      expect(err.message).toContain('"C:/nope/missing.png" is outside the allowed directory');
+    } else {
+      // POSIX: C:/... is a relative path inside it that simply isn't there.
+      // Unstripped, /C:/... would be absolute and refused instead.
+      expect(err.message).toContain('File not found: C:/nope/missing.png');
+    }
+  });
+
+  // The thrown message reaches the model; a relative input must not come
+  // back resolved against the server's working directory.
+  it.each([
+    ['a missing file', 'gone.png', /File not found/],
+    ['an empty file', 'empty.png', /File is empty/],
+    ['a directory', 'dir', /Not a regular file/]
+  ])('keeps the working directory out of the error for %s', async (_label, name, expected) => {
+    fs.mkdirSync(path.join(scratch, 'dir'), { recursive: true });
+    fs.writeFileSync(path.join(scratch, 'empty.png'), '');
+    const { instance } = api();
+    const rel = path.relative(process.cwd(), path.join(scratch, name));
+    const err = await instance.uploadImage('x.png', rel).catch((e: Error) => e);
+    expect(err.message).toMatch(expected);
+    expect(err.message).not.toContain(process.cwd());
   });
 
   it('reports a missing parent directory', async () => {

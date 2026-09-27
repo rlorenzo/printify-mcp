@@ -1,9 +1,8 @@
 /**
- * Pure helpers for image generation: option mapping and output-format rules.
- *
- * Extracted from generateImage so the branching lives in small testable units
- * rather than inflating one function's cyclomatic complexity.
+ * Image generation helpers: option mapping and output-format rules.
  */
+import * as fs from 'fs';
+import * as path from 'path';
 
 /**
  * Map tool options onto the names the Replicate client expects.
@@ -75,18 +74,14 @@ export function applyOutputFormat<T extends { png: any; jpeg: any; webp: any }>(
 }
 
 /**
- * Write a copy of a generated image under ./debug for troubleshooting.
- *
- * A no-op unless PRINTIFY_MCP_DEBUG is set, and never throws: a failed debug
- * write must not abort the upload it was meant to help diagnose.
+ * Save a copy of an image under ./debug when PRINTIFY_MCP_DEBUG is set. Never
+ * throws, so a failed debug write cannot abort an upload.
  */
 export async function saveDebugCopy(buffer: Buffer | undefined, fileName: string | undefined): Promise<void> {
   if (!process.env.PRINTIFY_MCP_DEBUG) return;
   try {
-    const fs = await import('fs');
-    const path = await import('path');
     const debugDir = path.join(process.cwd(), 'debug');
-    if (!fs.existsSync(debugDir)) fs.mkdirSync(debugDir, { recursive: true });
+    fs.mkdirSync(debugDir, { recursive: true });
     if (!buffer) {
       console.error('No image data to save for debugging');
       return;

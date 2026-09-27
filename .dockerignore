@@ -9,6 +9,5 @@ dist
 *.md
 !README.md
 temp
-docs
 .vscode
 .idea

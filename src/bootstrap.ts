@@ -1,8 +1,6 @@
 /**
- * Client initialization for the CLI entrypoint.
- *
- * Kept out of index.ts so it can be tested directly: index.ts itself only runs
- * inside a spawned process, where a coverage provider cannot see it.
+ * Client initialization for the CLI entrypoint (kept out of index.ts so it can
+ * be tested directly).
  */
 import { PrintifyAPI } from './printify-api.js';
 import { ReplicateClient } from './replicate-client.js';
@@ -11,19 +9,30 @@ import type { PrintifyContext } from './tools.js';
 import { describeError } from './utils/error-handler.js';
 
 /**
- * Populate `ctx` from the environment, logging what was configured.
- *
- * Never throws: a missing key or an unreachable Printify leaves the relevant
- * client null, and the tools report that clearly per call rather than the
- * server failing to start.
- *
- * The two clients are initialized independently so a Printify outage cannot
- * take the Replicate-backed image tools down with it.
+ * Populate `ctx` from the environment. Never throws: a missing key or an
+ * unreachable Printify leaves that client null for the tools to report.
+ * Replicate is set up first because it needs no network, so image tools are
+ * ready while Printify is still connecting.
  */
 export async function initializeClients(
   ctx: PrintifyContext,
   env: NodeJS.ProcessEnv = process.env
 ): Promise<PrintifyContext> {
+  try {
+    // Shared with the client so defaults set without a token still apply.
+    ctx.defaultsManager ??= new DefaultsManager();
+
+    const replicateApiToken = env.REPLICATE_API_TOKEN;
+    if (!replicateApiToken) {
+      console.error('REPLICATE_API_TOKEN environment variable is not set. The Replicate API client will not be initialized, so image generation is unavailable. get_defaults and set_default still work.');
+    } else {
+      ctx.replicateClient = new ReplicateClient(replicateApiToken, ctx.defaultsManager);
+      console.error('Replicate API client initialized successfully.');
+    }
+  } catch (error) {
+    console.error('Error initializing the Replicate API client:', describeError(error));
+  }
+
   try {
     const printifyApiKey = env.PRINTIFY_API_KEY;
 
@@ -47,22 +56,6 @@ export async function initializeClients(
     }
   } catch (error) {
     console.error('Error initializing the Printify API client:', describeError(error));
-  }
-
-  try {
-    // The defaults outlive the client: they are readable and settable with no
-    // token, so hand the same manager to the client when there is one.
-    ctx.defaultsManager ??= new DefaultsManager();
-
-    const replicateApiToken = env.REPLICATE_API_TOKEN;
-    if (!replicateApiToken) {
-      console.error('REPLICATE_API_TOKEN environment variable is not set. The Replicate API client will not be initialized, so image generation is unavailable. get_defaults and set_default still work.');
-    } else {
-      ctx.replicateClient = new ReplicateClient(replicateApiToken, ctx.defaultsManager);
-      console.error('Replicate API client initialized successfully.');
-    }
-  } catch (error) {
-    console.error('Error initializing the Replicate API client:', describeError(error));
   }
 
   return ctx;

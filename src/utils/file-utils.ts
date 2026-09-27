@@ -153,23 +153,41 @@ export function validateFilePath(filePath: string, operation: 'read' | 'write'):
 }
 
 /**
- * Read a file confined to ALLOWED_FILE_DIR, checking the file actually read
- * rather than only the path.
+ * Turn a caller-supplied file source into a path: strip a file:// scheme
+ * (file:///Users/x is the absolute path /Users/x, so its own slash stays) and
+ * the leading slash of a Windows drive path from a file:// URI (/C:/x -> C:/x).
+ * One rule on every platform, so every caller accepts the same inputs.
+ */
+export function normalizeFileUri(source: string): string {
+  // A plain /C:/x is left alone: on POSIX it is a real absolute path, distinct
+  // from the relative C:/x.
+  if (!source.startsWith('file://')) return source;
+  const filePath = source.slice('file://'.length);
+  return /^\/[a-zA-Z]:[\\/]/.test(filePath) ? filePath.substring(1) : filePath;
+}
+
+/**
+ * Open a file confined to ALLOWED_FILE_DIR, checking the file actually opened
+ * rather than only the path. The caller owns the returned descriptor and must
+ * close it.
  *
  * validateFilePath checks a path at one moment; opening that path again by
- * name later (sharp(path), readFileSync(path)) re-resolves it, so a file or a
- * parent directory swapped for a symlink in between would be followed out of
- * the sandbox. Here the file is opened once -- with O_NOFOLLOW, which refuses a
- * swapped final component on POSIX -- then the path is re-validated and must
- * still name the very file that was opened (same device and inode), which
- * catches a swapped parent directory. Size checks and the read itself go
- * through that descriptor, never the name again.
+ * name later (sharp(path), readFileSync(path), openSync(path)) re-resolves it,
+ * so a file or a parent directory swapped for a symlink in between would be
+ * followed out of the sandbox. Here the file is opened once -- with
+ * O_NOFOLLOW, which refuses a swapped final component on POSIX -- then the
+ * path is re-validated and must still name the very file that was opened
+ * (same device and inode), which catches a swapped parent directory. Anything
+ * read afterwards goes through the descriptor, never the name again.
  *
  * On a filesystem that reports no inode numbers (0 for both sides) the
  * identity check cannot tell files apart and the re-validation is what
  * remains.
+ *
+ * Error messages quote `filePath` as the caller gave it, never `resolved`:
+ * they can reach the model, and resolving a relative path prefixes the cwd.
  */
-export function readConfinedFile(filePath: string, maxBytes: number): { resolved: string; data: Buffer } {
+export function openConfined(filePath: string): { fd: number; resolved: string; stats: fs.Stats } {
   const resolved = validateFilePath(filePath, 'read');
 
   let fd: number;
@@ -177,7 +195,7 @@ export function readConfinedFile(filePath: string, maxBytes: number): { resolved
     fd = fs.openSync(resolved, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
   } catch (error: any) {
     if (error?.code === 'ENOENT') {
-      throw new Error(`File not found: ${previewText(resolved)}`, { cause: error });
+      throw new Error(`File not found: ${previewText(filePath)}`, { cause: error });
     }
     if (error?.code === 'ELOOP') {
       throw new Error(`File read denied: "${previewText(filePath)}" is a symbolic link.`, { cause: error });
@@ -186,29 +204,44 @@ export function readConfinedFile(filePath: string, maxBytes: number): { resolved
   }
 
   try {
-    const opened = fs.fstatSync(fd);
+    const stats = fs.fstatSync(fd);
 
     // The path must still pass the sandbox check and still name the file we
     // hold open; otherwise something was swapped between check and open.
     validateFilePath(filePath, 'read');
     const current = fs.statSync(resolved);
-    if (current.dev !== opened.dev || current.ino !== opened.ino) {
+    if (current.dev !== stats.dev || current.ino !== stats.ino) {
       throw new Error(`File read denied: "${previewText(filePath)}" changed while it was being opened.`);
     }
+    return { fd, resolved, stats };
+  } catch (error) {
+    fs.closeSync(fd);
+    throw error;
+  }
+}
 
-    if (!opened.isFile()) {
-      throw new Error(`Not a regular file: ${previewText(resolved)}`);
-    }
-    if (opened.size === 0) {
-      throw new Error(`File is empty: ${previewText(resolved)}`);
-    }
-    if (opened.size > maxBytes) {
-      throw new Error(
-        `File is too large (${Math.round(opened.size / (1024 * 1024))}MB). ` +
-        `Maximum size is ${Math.round(maxBytes / (1024 * 1024))}MB.`
-      );
-    }
+/**
+ * The "file too large" error. Exact byte counts on both sides: rounding to MB
+ * turned a file 1 byte over a 10MB limit into "10MB. Maximum size is 10MB".
+ */
+export function fileTooLargeMessage(size: number, maxBytes: number): string {
+  return `File is too large (${size} bytes). Maximum size is ${maxBytes} bytes ` +
+    `(${(maxBytes / (1024 * 1024)).toFixed(0)}MB).`;
+}
 
+/** Read a whole file through openConfined, refusing non-files, empty files and files over maxBytes. */
+export function readConfinedFile(filePath: string, maxBytes: number): { resolved: string; data: Buffer } {
+  const { fd, resolved, stats } = openConfined(filePath);
+  try {
+    if (!stats.isFile()) {
+      throw new Error(`Not a regular file: ${previewText(filePath)}`);
+    }
+    if (stats.size === 0) {
+      throw new Error(`File is empty: ${previewText(filePath)}`);
+    }
+    if (stats.size > maxBytes) {
+      throw new Error(fileTooLargeMessage(stats.size, maxBytes));
+    }
     return { resolved, data: fs.readFileSync(fd) };
   } finally {
     fs.closeSync(fd);

@@ -101,6 +101,14 @@ describe('setDefault dimension exclusivity', () => {
 });
 
 describe('prepareModelInput model-specific parameters', () => {
+  // An empty negativePrompt clears the stored one for this generation; only an
+  // omitted option falls back to the default.
+  it('keeps an explicit empty negativePrompt', () => {
+    expect(dm.prepareModelInput('x', { negativePrompt: '' }).input.negative_prompt).toBe('');
+    expect(dm.prepareModelInput('x', {}).input.negative_prompt).toBe(dm.getDefault('negativePrompt'));
+    expect(dm.getDefault('negativePrompt')).not.toBe('');
+  });
+
   it('sends raw for the Ultra model and not Pro fields', () => {
     const { modelId, input } = dm.prepareModelInput('a cat', { model: ULTRA });
     expect(modelId).toBe(ULTRA);

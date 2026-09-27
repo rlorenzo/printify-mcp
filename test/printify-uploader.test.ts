@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import sharp from 'sharp';
 import { determineImageSourceType, uploadImageToPrintify } from '../src/services/printify-uploader.js';
+import { MAX_UPLOAD_BYTES, PrintifyAPI } from '../src/printify-api.js';
 
 const scratch = path.join(process.cwd(), '.tmp-upl-test');
 afterEach(() => fs.rmSync(scratch, { recursive: true, force: true }));
@@ -82,13 +83,37 @@ describe('uploadImageToPrintify', () => {
     expect(JSON.stringify(r.errorResponse)).toMatch(/outside the allowed directory/);
   });
 
-  it('rejects a file over the 20MB limit', async () => {
+  // The pre-check uses PrintifyAPI's own limit; it once allowed 20MB, which
+  // the real read then rejected anyway.
+  it('rejects a file over the upload limit before uploading', async () => {
     fs.mkdirSync(scratch, { recursive: true });
     const f = path.join(scratch, 'big.png');
-    fs.writeFileSync(f, Buffer.alloc(20 * 1024 * 1024 + 1, 1));
-    const r = await uploadImageToPrintify(client(), 'big.png', f);
+    fs.writeFileSync(f, Buffer.alloc(MAX_UPLOAD_BYTES + 1, 1));
+    const c = client();
+    const r = await uploadImageToPrintify(c, 'big.png', f);
     expect(r.success).toBe(false);
-    expect(JSON.stringify(r.errorResponse)).toMatch(/too large/);
+    // Exact bytes: rounded MB made a file 1 byte over read "10MB. Maximum size is 10MB".
+    expect(JSON.stringify(r.errorResponse)).toContain(
+      `File is too large (${MAX_UPLOAD_BYTES + 1} bytes). Maximum size is ${MAX_UPLOAD_BYTES} bytes (10MB).`
+    );
+    expect(c.uploadImage).not.toHaveBeenCalled();
+  });
+
+  // file:///C:/... must mean the same path here as in PrintifyAPI on every
+  // platform; the uploader once kept the slash on POSIX and refused it as an
+  // absolute path outside the sandbox.
+  it('accepts a file:// URI with a Windows drive path like PrintifyAPI does', async () => {
+    const r = await uploadImageToPrintify(client(), 'w.png', 'file:///C:/nope/missing.png');
+    const text = JSON.stringify(r.errorResponse);
+    expect(text).not.toContain('found: /C:/nope');
+    if (path.isAbsolute('C:/nope/missing.png')) {
+      // Windows: a drive path is absolute, so outside the allowed directory.
+      expect(text).toMatch(/outside the allowed directory/);
+    } else {
+      // POSIX: a relative path inside it, just missing.
+      expect(text).not.toMatch(/outside the allowed directory/);
+      expect(text).toContain('File not found: C:/nope/missing.png');
+    }
   });
 
   it('surfaces an SDK upload failure', async () => {
@@ -155,6 +180,44 @@ describe('uploadImageToPrintify diagnostics', () => {
     expect(text.length).toBeLessThan(3000);
   });
 
+  // The diagnostics go back to the model; a resolved absolute path would
+  // reveal the server's working directory for a relative input.
+  it('keeps the working directory out of file diagnostics', async () => {
+    await pngFile('rel.png');
+    const c = client({ uploadImage: vi.fn(async () => { throw new Error('nope'); }) });
+    const r = await uploadImageToPrintify(c, 'rel.png', path.join('.tmp-upl-test', 'rel.png'));
+    const text = JSON.stringify(r.errorResponse);
+    expect(text).toContain('FileExists');
+    expect(text).not.toContain(process.cwd());
+  });
+
+  // The error quotes the path as given: the resolved form of a relative path
+  // would reveal the server's working directory. (A directory or empty file
+  // is refused by PrintifyAPI.uploadImage; printify-api.test.ts covers those.)
+  it('keeps the working directory out of the error for a missing file', async () => {
+    fs.mkdirSync(scratch, { recursive: true });
+    const r = await uploadImageToPrintify(client(), 'x.png', path.join('.tmp-upl-test', 'gone.png'));
+    expect(r.success).toBe(false);
+    expect(JSON.stringify(r.errorResponse)).not.toContain(process.cwd());
+  });
+
+  // End to end through the real PrintifyAPI: its errors quote the path they
+  // are handed, so the uploader must hand over the caller's relative path,
+  // not the resolved one that carries the server's working directory.
+  it('keeps the working directory out of errors raised inside PrintifyAPI', async () => {
+    fs.mkdirSync(scratch, { recursive: true });
+    fs.writeFileSync(path.join(scratch, 'not-an-image.png'), 'plain text, not a PNG');
+    const api = new PrintifyAPI('test-token', '1');
+    (api as any).shops = [{ id: 1, title: 'Shop' }];
+    (api as any).client = { uploads: { uploadImage: vi.fn() } };
+
+    const r = await uploadImageToPrintify(api, 'x.png', path.join('.tmp-upl-test', 'not-an-image.png'));
+    expect(r.success).toBe(false);
+    const text = JSON.stringify(r.errorResponse);
+    expect(text).toContain('Failed to process file');
+    expect(text).not.toContain(process.cwd());
+  });
+
   it('reports file diagnostics when a file upload fails', async () => {
     const f = await pngFile('fails.png');
     const c = client({ uploadImage: vi.fn(async () => { throw new Error('nope'); }) });
@@ -185,6 +248,24 @@ describe('uploadImageToPrintify diagnostics', () => {
       process.chdir(originalCwd);
       fs.rmSync(sandbox, { recursive: true, force: true });
     }
+  });
+
+  // The debug copy is best-effort: its read failing (EISDIR here) must not
+  // stop an upload that goes ahead with debugging off.
+  it('does not fail the upload when the debug copy cannot be read', async () => {
+    fs.mkdirSync(scratch, { recursive: true });
+    const off = client();
+    await uploadImageToPrintify(off, 'dir.png', scratch);
+    expect(off.uploadImage).toHaveBeenCalledTimes(1);
+
+    const on = client();
+    process.env.PRINTIFY_MCP_DEBUG = '1';
+    try {
+      await uploadImageToPrintify(on, 'dir.png', scratch);
+    } finally {
+      delete process.env.PRINTIFY_MCP_DEBUG;
+    }
+    expect(on.uploadImage).toHaveBeenCalledTimes(1);
   });
 
   // readSync throws EISDIR here, which previously skipped closeSync and leaked

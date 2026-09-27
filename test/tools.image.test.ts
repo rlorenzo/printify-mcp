@@ -65,6 +65,18 @@ describe('generate_and_upload_image', () => {
     expect(sent).toMatchObject({ seed: 3, outputFormat: 'webp' });
   });
 
+  // Regression: zod-level defaults filled these in on every call, so a stored
+  // default set through set_default never reached generation.
+  it('uses stored defaults for options the call leaves out', async () => {
+    const replicate = fakeReplicate();
+    const h = harness({ printifyClient: fakePrintify(), replicateClient: replicate });
+    await h.call('set_default', { option: 'outputFormat', value: 'webp' });
+    await h.call('set_default', { option: 'numInferenceSteps', value: 40 });
+    await h.callParsed('generate_and_upload_image', { prompt: 'x', fileName: 'f' });
+    const sent = replicate.generateImage.mock.calls[0][1];
+    expect(sent).toMatchObject({ outputFormat: 'webp', numInferenceSteps: 40 });
+  });
+
   // An explicit dimension must outrank a stored default aspectRatio; the
   // default previously swallowed it, so the caller's width was silently lost.
   it('lets an explicit width override the default aspectRatio', async () => {
@@ -158,6 +170,32 @@ describe('generate_image', () => {
     expect(res.isError).toBeFalsy();
     expect(fs.existsSync(out)).toBe(true);
     expect((await sharp(out).metadata()).format).toBe('png');
+  });
+
+  // The reply names the file written, not the generator's own name for it
+  // (which carries the output format's extension).
+  it('reports the file name of the saved path', async () => {
+    fs.mkdirSync(scratch, { recursive: true });
+    const out = path.join(scratch, 'saved.jpg');
+    const h = harness({ replicateClient: fakeReplicate() });
+    const res = await h.call('generate_image', { prompt: 'x', outputPath: out, outputFormat: 'png' });
+    expect(res.isError).toBeFalsy();
+    expect(res.content[0].text).toContain('**File Name**: "saved.jpg"');
+  });
+
+  // Explicit width/height drop the aspect ratio; the reply must not then claim
+  // the image was generated at 1:1.
+  it('reports an aspect ratio only when one was used', async () => {
+    fs.mkdirSync(scratch, { recursive: true });
+    const out = path.join(scratch, 'sized.png');
+    const h = harness({ replicateClient: fakeReplicate() });
+
+    const sized = await h.call('generate_image', { prompt: 'x', outputPath: out, width: 512, height: 768 });
+    expect(sized.isError).toBeFalsy();
+    expect(sized.content[0].text).not.toContain('Aspect Ratio');
+
+    const ratio = await h.call('generate_image', { prompt: 'x', outputPath: out, aspectRatio: '16:9' });
+    expect(ratio.content[0].text).toMatch(/Aspect Ratio.*16:9/);
   });
 
   it('refuses an output path outside ALLOWED_FILE_DIR', async () => {
