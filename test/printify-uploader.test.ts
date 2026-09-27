@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import sharp from 'sharp';
 import { determineImageSourceType, uploadImageToPrintify } from '../src/services/printify-uploader.js';
-import { MAX_UPLOAD_BYTES } from '../src/printify-api.js';
+import { MAX_UPLOAD_BYTES, PrintifyAPI } from '../src/printify-api.js';
 
 const scratch = path.join(process.cwd(), '.tmp-upl-test');
 afterEach(() => fs.rmSync(scratch, { recursive: true, force: true }));
@@ -192,6 +192,23 @@ describe('uploadImageToPrintify diagnostics', () => {
     const r = await uploadImageToPrintify(client(), 'x.png', path.join('.tmp-upl-test', 'gone.png'));
     expect(r.success).toBe(false);
     expect(JSON.stringify(r.errorResponse)).not.toContain(process.cwd());
+  });
+
+  // End to end through the real PrintifyAPI: its errors quote the path they
+  // are handed, so the uploader must hand over the caller's relative path,
+  // not the resolved one that carries the server's working directory.
+  it('keeps the working directory out of errors raised inside PrintifyAPI', async () => {
+    fs.mkdirSync(scratch, { recursive: true });
+    fs.writeFileSync(path.join(scratch, 'not-an-image.png'), 'plain text, not a PNG');
+    const api = new PrintifyAPI('test-token', '1');
+    (api as any).shops = [{ id: 1, title: 'Shop' }];
+    (api as any).client = { uploads: { uploadImage: vi.fn() } };
+
+    const r = await uploadImageToPrintify(api, 'x.png', path.join('.tmp-upl-test', 'not-an-image.png'));
+    expect(r.success).toBe(false);
+    const text = JSON.stringify(r.errorResponse);
+    expect(text).toContain('Failed to process file');
+    expect(text).not.toContain(process.cwd());
   });
 
   it('reports file diagnostics when a file upload fails', async () => {

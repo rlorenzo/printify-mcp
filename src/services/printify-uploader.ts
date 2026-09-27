@@ -153,16 +153,17 @@ export async function uploadImageToPrintify(
 
     if (sourceType === 'file') {
       const requested = normalizeFileUri(source);
+      // Validated here to fail fast; every later step re-validates for itself.
+      // Those steps get `requested`, not the resolved path: their errors quote
+      // the path they were given and reach the model, and the resolved form
+      // of a relative path reveals the server's working directory.
       const filePath = validateFilePath(requested, 'read');
-      // Errors quote the path as the caller gave it: they reach the model,
-      // and the resolved form of a relative path reveals the cwd.
       const shown = previewText(requested);
 
       console.error(`Uploading file to Printify: ${filePath}`);
-      await verifyFileReadable(filePath, shown);
+      await verifyFileReadable(requested, shown);
 
-      console.error(`Attempting to upload file to Printify: ${filePath}`);
-      image = await printifyClient.uploadImage(fileName, filePath);
+      image = await printifyClient.uploadImage(fileName, requested);
       console.error(`Upload successful! Image ID: ${image.id}`);
       console.error(`Preview URL: ${image.preview_url}`);
     } else {
@@ -209,7 +210,7 @@ export async function uploadImageToPrintify(
       tips.push('Check that the path is correct and includes the full path to the file');
       tips.push('The file must be a valid image format (PNG, JPEG, SVG)');
       tips.push('Recommended resolution for JPEG/PNG files is 300 DPI');
-      tips.push('Maximum file size is 20MB');
+      tips.push(`Maximum file size is ${MAX_UPLOAD_BYTES / (1024 * 1024)}MB`);
     } else {
       tips.push('Make sure the data URL has the form data:<mime>;base64,<payload> and represents an image');
     }
