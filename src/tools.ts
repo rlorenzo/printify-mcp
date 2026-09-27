@@ -390,8 +390,9 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
         zip: z.string().describe("Postal code"),
         company: z.string().optional().describe("Company")
       }).describe("Shipping address"),
-      shippingMethod: z.enum(["standard", "priority", "express", "economy"]).optional()
-        .describe("Shipping method (default standard); see calculate_order_shipping for prices"),
+      shippingMethod: z.enum(["standard", "priority", "printify_express", "economy"]).optional()
+        .describe("Shipping method (default standard). printify_express is Printify Express, for eligible products only; " +
+          "calculate_order_shipping quotes it as \"Printify Express\""),
       externalId: z.string().optional().describe("Your own id for the order; generated when omitted"),
       label: z.string().optional().describe("A label shown on the order in Printify"),
       sendShippingNotification: z.boolean().optional().describe("Have Printify email the recipient when it ships (default false)")

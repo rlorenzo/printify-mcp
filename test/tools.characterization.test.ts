@@ -185,3 +185,18 @@ describe('order change tools', () => {
     expect(tools.cancel_order.annotations.destructiveHint).toBe(true);
   });
 });
+
+describe('create_order shipping methods', () => {
+  // Code 3 is Printify Express; a bare "express" would be confused with the
+  // separate Express rate that calculate_order_shipping quotes.
+  it('accepts printify_express and rejects a bare express', async () => {
+    let sent: any;
+    const h = harness({ printifyClient: fakePrintify({ createOrder: async (data: any) => { sent = data; return { id: 'o' }; } }) });
+    const address = { firstName: 'A', lastName: 'B', address1: '1 St', city: 'C', zip: '1', country: 'US' };
+    await expect(h.callParsed('create_order', { lineItems: [{ sku: 'S', quantity: 1 }], address, shippingMethod: 'express' })).rejects.toThrow();
+    const res = await h.callParsed('create_order', { lineItems: [{ sku: 'S', quantity: 1 }], address, shippingMethod: 'printify_express' });
+    expect(res.isError).toBeFalsy();
+    expect(sent.shipping_method).toBe(3);
+    expect(sent.is_printify_express).toBe(true);
+  });
+});

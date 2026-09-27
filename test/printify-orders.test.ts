@@ -148,7 +148,7 @@ describe('createOrder', () => {
 
   it.each([
     ['priority', 2, false, false],
-    ['express', 3, true, false],
+    ['printify_express', 3, true, false],
     ['economy', 4, false, true]
   ] as const)('maps %s shipping to its code and flags', async (method, code, express, economy) => {
     let sent: any;

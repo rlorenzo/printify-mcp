@@ -26,7 +26,7 @@ Nothing is ordered by these tools.
 
 ## Placing an order
 
-`create_order` creates the order on hold; nothing is charged yet. Shipping is `standard` unless `shippingMethod` says `priority`, `express` or `economy`.
+`create_order` creates the order on hold; nothing is charged yet. Shipping is `standard` unless `shippingMethod` says `priority`, `printify_express` (Printify Express, eligible products only) or `economy`.
 
 ```javascript
 create_order({

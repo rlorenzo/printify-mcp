@@ -260,16 +260,18 @@ interface OrderAddress extends ShippingQuoteAddress {
   company?: string;
 }
 
-type ShippingMethod = 'standard' | 'priority' | 'express' | 'economy';
+type ShippingMethod = 'standard' | 'priority' | 'printify_express' | 'economy';
 
 /**
- * Printify's shipping_method codes. Express and economy also need their
- * matching flag set, or the API rejects the order.
+ * Printify's shipping_method codes, with the is_printify_express and
+ * is_economy_shipping flags kept consistent with them. Code 3 is Printify
+ * Express (eligible products only), which is not the "express" rate a
+ * shipping quote lists separately.
  */
 const SHIPPING_METHOD_CODES: Record<ShippingMethod, { code: number; express: boolean; economy: boolean }> = {
   standard: { code: 1, express: false, economy: false },
   priority: { code: 2, express: false, economy: false },
-  express: { code: 3, express: true, economy: false },
+  printify_express: { code: 3, express: true, economy: false },
   economy: { code: 4, express: false, economy: true }
 };
 
