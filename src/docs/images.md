@@ -44,5 +44,5 @@ Every upload stays in the account's library, so earlier artwork can be reused in
 ```javascript
 list_uploads({ page: 1, limit: 10 })   // id, file name, dimensions, upload time
 get_upload({ imageId: "5e16d66791287a0006e522b2" })   // adds the preview URL
-archive_upload({ imageId: "5e16d66791287a0006e522b2" })   // hides it from the library; products using it keep it
+archive_upload({ imageId: "5e16d66791287a0006e522b2" })   // archives it, removing it from the library
 ```

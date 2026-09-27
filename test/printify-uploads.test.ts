@@ -54,11 +54,11 @@ describe('getUpload and archiveUpload', () => {
     expect(text).toContain('**bytes**: "1138575"');
   });
 
-  it('archives an image and says existing products keep it', async () => {
+  it('archives an image by id', async () => {
     let archived = '';
     const client = fakeClient({ archiveUpload: async (id: string) => { archived = id; } });
     const text = (await archiveUpload(client, UPLOAD.id)).response!.content[0].text;
     expect(archived).toBe(UPLOAD.id);
-    expect(text).toContain('Products that already use it are unaffected.');
+    expect(text).toContain('no longer listed in the upload library');
   });
 });

@@ -421,7 +421,7 @@ export class PrintifyAPI {
     }
   }
 
-  /** One page of the account's uploaded images, newest first. */
+  /** One page of the account's uploaded images. */
   async listUploads(page = 1, limit = 10) {
     try {
       return await this.client.uploads.list(page, limit);
@@ -441,7 +441,7 @@ export class PrintifyAPI {
     }
   }
 
-  /** Hide an image from the upload library; products already using it keep it. */
+  /** Archive an uploaded image, removing it from the upload library. */
   async archiveUpload(imageId: string) {
     const id = pathId(imageId, 'imageId');
     try {

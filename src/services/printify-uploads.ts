@@ -85,7 +85,7 @@ export async function archiveUpload(printifyClient: PrintifyAPI, imageId: string
         response: formatSuccessResponse(
           'Upload Archived',
           { ImageId: imageId },
-          'The image no longer appears in the upload library. Products that already use it are unaffected.'
+          'The image is archived and no longer listed in the upload library.'
         )
       };
     }

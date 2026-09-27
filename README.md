@@ -94,7 +94,7 @@ listed on the [GitHub Releases page](https://github.com/rlorenzo/printify-mcp/re
 | `upload_image` | Upload from a URL, a local file in `ALLOWED_FILE_DIR`, or a `data:<mime>;base64,...` URL (`fileName`, `url`) |
 | `list_uploads` | The account's uploaded images (`page`, `limit`) |
 | `get_upload` | One uploaded image, with its preview URL (`imageId`) |
-| `archive_upload` | Hide an image from the upload library; products using it keep it (`imageId`) |
+| `archive_upload` | Archive an image, removing it from the upload library (`imageId`) |
 | `generate_and_upload_image` | Generate with Flux and upload to Printify (`prompt`, `fileName`, generation options) |
 | `generate_image` | Generate with Flux and save locally (`prompt`, `outputPath`, generation options) |
 | `get_defaults` / `set_default` | View or change default generation options (model, size, aspect ratio, etc.) |
