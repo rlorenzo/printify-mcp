@@ -1,8 +1,8 @@
-import * as fs from 'fs';
 import * as path from 'path';
 import Printify from 'printify-sdk-js';
 import sharp from 'sharp';
-import { describeError } from './utils/error-handler.js';
+import { describeError, previewText } from './utils/error-handler.js';
+import { readConfinedFile } from './utils/file-utils.js';
 import { applyOutputFormat, mimeTypeFor } from './services/image-format.js';
 
 export interface PrintifyShop {
@@ -437,8 +437,16 @@ export class PrintifyAPI {
         return await this.uploadFile(fileName, source);
       }
 
-      const contents = source.startsWith('data:image/') ? source.split(',')[1] : source;
-      console.error(`Uploading image with base64 data (length: ${contents.length})`);
+      // Only `;base64,` data URLs: without that marker the payload is
+      // percent-encoded text (RFC 2397), not base64.
+      const match = /^data:[^,]*;base64,(.+)$/s.exec(source);
+      if (!match) {
+        throw new Error(
+          `Invalid data URL for ${fileName}: expected "data:<mime>;base64,<payload>" with a non-empty base64 payload.`
+        );
+      }
+      const contents = match[1];
+      console.error(`Uploading image with base64 data from data URL (length: ${contents.length})`);
       return await this.client.uploads.uploadImage({ file_name: fileName, contents });
     } catch (error: any) {
       console.error('Error uploading image:', describeError(error));
@@ -465,23 +473,16 @@ export class PrintifyAPI {
         filePath = filePath.substring(1);
       }
 
-      console.error(`Reading image file: ${filePath}`);
+      console.error(`Reading image file: ${previewText(filePath)}`);
 
-      if (!fs.existsSync(filePath)) {
-        throw new Error(`File not found: ${filePath}`);
-      }
+      // Every local read ends here, so this confinement check holds even for
+      // callers that skip uploadImageToPrintify's validation. The file is read
+      // through one descriptor and never reopened by name.
+      const { resolved, data } = readConfinedFile(filePath, 10 * 1024 * 1024);
 
-      const stats = fs.statSync(filePath);
-      if (stats.size === 0) {
-        throw new Error(`File is empty: ${filePath}`);
-      }
-      if (stats.size > 10 * 1024 * 1024) {
-        throw new Error(`File is too large (${Math.round(stats.size / (1024 * 1024))}MB). Maximum size is 10MB.`);
-      }
-
-      const ext = path.extname(filePath).toLowerCase();
+      const ext = path.extname(resolved).toLowerCase();
       const outputFormat = ext === '.jpg' || ext === '.jpeg' ? 'jpeg' : 'png';
-      const buffer = await applyOutputFormat(sharp(filePath), outputFormat).toBuffer();
+      const buffer = await applyOutputFormat(sharp(data), outputFormat).toBuffer();
       const contents = buffer.toString('base64');
 
       console.error(`Uploading ${fileName} (${mimeTypeFor(outputFormat)}, ${contents.length} base64 chars)`);
@@ -491,13 +492,13 @@ export class PrintifyAPI {
     } catch (error: any) {
       console.error('Error reading file:', describeError(error));
       throw new Error(
-        `Failed to process file ${source}: ${error.message || 'Unknown error'}\n\n` +
+        `Failed to process file ${previewText(source)}: ${error.message || 'Unknown error'}\n\n` +
         'Troubleshooting steps:\n' +
         '1. Check if the file exists and is readable\n' +
         '2. Make sure the file is a valid image (PNG, JPEG, etc.)\n' +
-        '3. Try using a URL or base64 encoded string instead\n' +
+        '3. Try using a URL or a data URL (data:<mime>;base64,<payload>) instead\n' +
         '\nFile processing details:\n' +
-        `- Attempted to read from: ${source}\n`,
+        `- Attempted to read from: ${previewText(source)}\n`,
         { cause: error }
       );
     }

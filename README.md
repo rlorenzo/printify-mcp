@@ -10,7 +10,7 @@ Flux models.
 - **Shops:** list shops and switch the active one
 - **Products:** list, get, create, update, delete, and publish
 - **Catalog:** browse blueprints, print providers, and variants
-- **Images:** upload from a URL, local file, or base64; generate with Flux and
+- **Images:** upload from a URL, local file, or base64 `data:` URL; generate with Flux and
   upload in one step
 - **Built-in guides:** the `how_to_use` tool serves step-by-step workflow docs
 - **Prompt:** `generate_product_description`
@@ -35,7 +35,7 @@ Set these in the environment or in a `.env` file in the working directory
 | `PRINTIFY_SHOP_ID` | No | Default shop; otherwise the first shop is used |
 | `REPLICATE_API_TOKEN` | No | Enables image generation |
 | `IMGBB_API_KEY` | For Flux Ultra | Stages large images for upload to Printify |
-| `ALLOWED_FILE_DIR` | No | Directory local uploads are confined to (default: working directory) |
+| `ALLOWED_FILE_DIR` | No | Directory that local uploads and `generate_image` output are confined to (default: working directory) |
 | `PRINTIFY_MCP_DEBUG` | No | Any value saves each generated/uploaded image under `./debug` |
 
 ## Using with Claude Desktop
@@ -91,7 +91,7 @@ listed on the [GitHub Releases page](https://github.com/rlorenzo/printify-mcp/re
 | `get_blueprint` | Get a blueprint (`blueprintId`) |
 | `get_print_providers` | Print providers for a blueprint (`blueprintId`) |
 | `get_variants` | Variants for a blueprint and provider (`blueprintId`, `printProviderId`) |
-| `upload_image` | Upload from a URL, local file, or base64 string (`fileName`, `url`) |
+| `upload_image` | Upload from a URL, a local file in `ALLOWED_FILE_DIR`, or a `data:<mime>;base64,...` URL (`fileName`, `url`) |
 | `generate_and_upload_image` | Generate with Flux and upload to Printify (`prompt`, `fileName`, generation options) |
 | `generate_image` | Generate with Flux and save locally (`prompt`, `outputPath`, generation options) |
 | `get_defaults` / `set_default` | View or change default generation options (model, size, aspect ratio, etc.) |
@@ -176,7 +176,7 @@ client), `src/services/` (uploads, products, catalog, image generation),
 - **"Replicate API client is not initialized":** set `REPLICATE_API_TOKEN`.
 - **Ultra model upload errors:** set `IMGBB_API_KEY`, or switch models with
   `set_default({ option: "model", value: "black-forest-labs/flux-1.1-pro" })`.
-- **Local file upload refused:** the file must be inside `ALLOWED_FILE_DIR`.
+- **Local file refused:** upload sources and `generate_image` output paths must be inside `ALLOWED_FILE_DIR`.
 - **Product creation fails:** confirm the variant IDs belong to the chosen
   blueprint and print provider, and that the image IDs exist.
 - Server logs go to stderr. For Docker, use `docker logs printify-mcp`.

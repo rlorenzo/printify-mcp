@@ -26,7 +26,7 @@ The response lists variant IDs with their options (e.g. 18100 = "Black / S") and
 ## 4. Upload images
 
 ```javascript
-upload_image({ fileName: "front.png", url: "https://example.com/front.png" })   // URL, local path, or base64
+upload_image({ fileName: "front.png", url: "https://example.com/front.png" })   // URL, local path, or data: URL
 generate_and_upload_image({ prompt: "futuristic neon cityscape", fileName: "front.png" })
 ```
 

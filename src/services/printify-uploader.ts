@@ -4,7 +4,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { PrintifyAPI, requireShop } from '../printify-api.js';
-import { describeError, formatErrorResponse, formatSuccessResponse, TIPS } from '../utils/error-handler.js';
+import { describeError, formatErrorResponse, formatSuccessResponse, previewText, TIPS } from '../utils/error-handler.js';
 import { getFileInfo, validateFilePath } from '../utils/file-utils.js';
 import { saveDebugCopy } from './image-format.js';
 
@@ -89,10 +89,13 @@ export function determineImageSourceType(source: string): 'url' | 'file' | 'base
   if (source.startsWith('http://') || source.startsWith('https://')) {
     return 'url';
   }
-  if (source.includes(':\\') || source.includes(':/') || source.startsWith('/') || source.includes('\\')) {
-    return 'file';
+  // Base64 must arrive as a data: URL. Raw base64 is indistinguishable from a
+  // relative path (JPEG base64 starts with /9j/), so everything else is a file
+  // and goes through path validation.
+  if (source.startsWith('data:')) {
+    return 'base64';
   }
-  return 'base64';
+  return 'file';
 }
 
 /**
@@ -227,16 +230,16 @@ export async function uploadImageToPrintify(
       tips.push('Recommended resolution for JPEG/PNG files is 300 DPI');
       tips.push('Maximum file size is 20MB');
     } else {
-      tips.push('Make sure the base64 string is valid and represents an image');
+      tips.push('Make sure the data URL has the form data:<mime>;base64,<payload> and represents an image');
     }
 
-    // Error type, message, stack, and API status are added by formatErrorResponse.
+    // Error type, message, and API status are added by formatErrorResponse.
     const diagnosticInfo: any = {
       FileName: fileName,
       SourceType: sourceTypeLabel,
-      Source: sourceType === 'base64' ? `${source.substring(0, 30)}...` : source,
+      // Bounded here: the source can be an arbitrarily large payload.
+      Source: previewText(source),
       CurrentShop: printifyClient.getCurrentShop(),
-      CurrentWorkingDirectory: process.cwd(),
       NodeVersion: process.version,
       Platform: process.platform,
       PrintifyShopId: printifyClient.getCurrentShopId(),

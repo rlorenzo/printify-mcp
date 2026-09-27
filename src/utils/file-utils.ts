@@ -4,7 +4,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomBytes } from 'crypto';
-import { describeError } from './error-handler.js';
+import { describeError, previewText } from './error-handler.js';
 
 /**
  * Ensure a directory exists, creating it if necessary
@@ -71,22 +71,146 @@ export function getFileInfo(filePath: string): { exists: boolean; size?: number;
 }
 
 /**
+ * realpath of `p`, resolved through its deepest existing ancestor so a file
+ * that does not exist yet (a write target) still has symlinks above it
+ * followed. Throws for a dangling symlink, or for a segment that exists but
+ * cannot be inspected (EACCES/EPERM) -- only a genuinely missing segment is
+ * walked past -- and callers treat either as a denial.
+ */
+function realpathNearest(p: string): string {
+  let existing = p;
+  for (;;) {
+    try {
+      fs.lstatSync(existing);
+      break;
+    } catch (error: any) {
+      if (error?.code !== 'ENOENT' && error?.code !== 'ENOTDIR') throw error;
+      const parent = path.dirname(existing);
+      if (parent === existing) break;
+      existing = parent;
+    }
+  }
+  return path.join(fs.realpathSync(existing), path.relative(existing, p));
+}
+
+let warnedDefaultDir = false;
+
+/**
  * Resolve a path and confirm it stays inside an allowed base directory.
  *
  * Tool arguments reach this server from a model, so a path like
  * `../../.ssh/id_rsa` is reachable input rather than a hypothetical. Uploads are
- * confined to `ALLOWED_FILE_DIR` (default: the working directory).
+ * confined to `ALLOWED_FILE_DIR` (default: the working directory). Both sides
+ * are compared by realpath so a symlink inside the directory cannot escape it.
  */
 export function validateFilePath(filePath: string, operation: 'read' | 'write'): string {
+  if (!process.env.ALLOWED_FILE_DIR && !warnedDefaultDir) {
+    warnedDefaultDir = true;
+    console.error(`ALLOWED_FILE_DIR is not set; file access is confined to the working directory "${process.cwd()}".`);
+  }
   const baseDir = path.resolve(process.env.ALLOWED_FILE_DIR || process.cwd());
   const resolved = path.resolve(filePath);
 
-  if (resolved !== baseDir && !resolved.startsWith(baseDir + path.sep)) {
+  let inside = false;
+  try {
+    const realBase = realpathNearest(baseDir);
+    const realTarget = realpathNearest(resolved);
+    const prefix = realBase.endsWith(path.sep) ? realBase : realBase + path.sep;
+    inside = realTarget === realBase || realTarget.startsWith(prefix);
+  } catch {
+    // Dangling symlink or unreadable ancestor: deny.
+  }
+
+  if (!inside) {
+    const usingDefaultDir = !process.env.ALLOWED_FILE_DIR;
+
+    // The path is model-supplied and can be any length, so both messages
+    // quote a preview: it cannot flood the log, and the reason after it
+    // survives any cap on the reply.
+
+    // Operator log: a preview of the resolved path plus the full base
+    // directory, including the server's absolute working directory.
+    console.error(describeError(new Error(
+      `File ${operation} denied: "${previewText(resolved)}" is outside the allowed directory "${baseDir}".`
+    )));
+
+    // Model-facing message: leaves the base directory out when it defaults
+    // to cwd, and names the path as the caller gave it rather than
+    // `resolved`, which for a relative path is prefixed with the cwd. That
+    // path is server-internal detail, and echoing it back through tool output
+    // is exactly what this check exists to avoid doing with other paths.
+    const shown = previewText(filePath);
     throw new Error(
-      `File ${operation} denied: "${resolved}" is outside the allowed directory "${baseDir}". ` +
-      `Set ALLOWED_FILE_DIR to permit another location.`
+      usingDefaultDir
+        ? `File ${operation} denied: "${shown}" is outside the allowed directory ` +
+          `(the working directory; set ALLOWED_FILE_DIR to change it).`
+        : `File ${operation} denied: "${shown}" is outside the allowed directory "${baseDir}". ` +
+          `Set ALLOWED_FILE_DIR to permit another location.`
     );
   }
 
   return resolved;
+}
+
+/**
+ * Read a file confined to ALLOWED_FILE_DIR, checking the file actually read
+ * rather than only the path.
+ *
+ * validateFilePath checks a path at one moment; opening that path again by
+ * name later (sharp(path), readFileSync(path)) re-resolves it, so a file or a
+ * parent directory swapped for a symlink in between would be followed out of
+ * the sandbox. Here the file is opened once -- with O_NOFOLLOW, which refuses a
+ * swapped final component on POSIX -- then the path is re-validated and must
+ * still name the very file that was opened (same device and inode), which
+ * catches a swapped parent directory. Size checks and the read itself go
+ * through that descriptor, never the name again.
+ *
+ * On a filesystem that reports no inode numbers (0 for both sides) the
+ * identity check cannot tell files apart and the re-validation is what
+ * remains.
+ */
+export function readConfinedFile(filePath: string, maxBytes: number): { resolved: string; data: Buffer } {
+  const resolved = validateFilePath(filePath, 'read');
+
+  let fd: number;
+  try {
+    fd = fs.openSync(resolved, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+  } catch (error: any) {
+    if (error?.code === 'ENOENT') {
+      throw new Error(`File not found: ${previewText(resolved)}`, { cause: error });
+    }
+    if (error?.code === 'ELOOP') {
+      throw new Error(`File read denied: "${previewText(filePath)}" is a symbolic link.`, { cause: error });
+    }
+    throw error;
+  }
+
+  try {
+    const opened = fs.fstatSync(fd);
+
+    // The path must still pass the sandbox check and still name the file we
+    // hold open; otherwise something was swapped between check and open.
+    validateFilePath(filePath, 'read');
+    const current = fs.statSync(resolved);
+    if (current.dev !== opened.dev || current.ino !== opened.ino) {
+      throw new Error(`File read denied: "${previewText(filePath)}" changed while it was being opened.`);
+    }
+
+    if (!opened.isFile()) {
+      throw new Error(`Not a regular file: ${previewText(resolved)}`);
+    }
+    if (opened.size === 0) {
+      throw new Error(`File is empty: ${previewText(resolved)}`);
+    }
+    if (opened.size > maxBytes) {
+      throw new Error(
+        `File is too large (${Math.round(opened.size / (1024 * 1024))}MB). ` +
+        `Maximum size is ${Math.round(maxBytes / (1024 * 1024))}MB.`
+      );
+    }
+
+    return { resolved, data: fs.readFileSync(fd) };
+  } finally {
+    fs.closeSync(fd);
+  }
 }

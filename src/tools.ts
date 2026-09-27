@@ -11,8 +11,8 @@ import { mergeGenerationOptions } from "./generation-options.js";
 import { stageOnImgbb, requiresImgbb, hasImgbbKey, IMGBB_REQUIRED_MESSAGE } from "./services/imgbb.js";
 import { saveDebugCopy } from "./services/image-format.js";
 import { generateImage } from "./services/image-generator.js";
-import { formatSuccessResponse, textResponse } from "./utils/error-handler.js";
-import { ensureDirectoryExists } from "./utils/file-utils.js";
+import { boundErrorText, describeError, formatSuccessResponse, previewText, textResponse } from "./utils/error-handler.js";
+import { ensureDirectoryExists, validateFilePath } from "./utils/file-utils.js";
 import * as shops from "./services/printify-shops.js";
 import * as products from "./services/printify-products.js";
 import * as blueprints from "./services/printify-blueprints.js";
@@ -44,7 +44,8 @@ type ServiceResult = { success: boolean; response?: any; errorResponse?: any };
 
 /** An error inside the MCP result envelope, so it reaches the model rather than the transport. */
 function toolError(text: string): ToolResult {
-  return { content: [{ type: "text", text }], isError: true };
+  // Often carries an error.message that echoes model-supplied input.
+  return { content: [{ type: "text", text: boundErrorText(text) }], isError: true };
 }
 
 /** The defaults as a markdown table. */
@@ -187,6 +188,8 @@ async function uploadGenerated(
   return image;
 }
 
+const READ_ONLY = { readOnlyHint: true };
+
 /** Register every Printify tool and prompt on `server`. */
 export function registerTools(server: McpServer, ctx: PrintifyContext): void {
   /** Guard on the Printify client, then unwrap the service result. */
@@ -196,9 +199,9 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       return unwrap(await run(ctx.printifyClient, args));
     };
 
-  server.tool("get_printify_status", {}, withPrintify((client) => shops.getPrintifyStatus(client)));
+  server.tool("get_printify_status", {}, READ_ONLY, withPrintify((client) => shops.getPrintifyStatus(client)));
 
-  server.tool("list_shops", {}, withPrintify((client) => shops.listPrintifyShops(client)));
+  server.tool("list_shops", {}, READ_ONLY, withPrintify((client) => shops.listPrintifyShops(client)));
 
   server.tool(
     "switch_shop",
@@ -212,12 +215,14 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       page: z.number().optional().default(1).describe("Page number"),
       limit: z.number().optional().default(10).describe("Number of products per page")
     },
+    READ_ONLY,
     withPrintify((client, { page, limit }) => products.listProducts(client, { page, limit }))
   );
 
   server.tool(
     "get_product",
     { productId: z.string().describe("Product ID") },
+    READ_ONLY,
     withPrintify((client, { productId }) => products.getProduct(client, productId))
   );
 
@@ -245,12 +250,14 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       printAreas: printAreasSchema.optional().describe("Print areas for the product"),
       tags: z.array(z.string()).optional().describe("Tags for the product")
     },
+    { title: "Update product", destructiveHint: true, idempotentHint: false },
     withPrintify((client, { productId, ...updateData }) => products.updateProduct(client, productId, updateData))
   );
 
   server.tool(
     "delete_product",
     { productId: z.string().describe("Product ID") },
+    { title: "Delete product", destructiveHint: true, idempotentHint: false },
     withPrintify((client, { productId }) => products.deleteProduct(client, productId))
   );
 
@@ -266,6 +273,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
         tags: z.boolean().optional().default(true).describe("Publish tags")
       }).optional().describe("Publish details")
     },
+    { title: "Publish product", destructiveHint: true, idempotentHint: false },
     withPrintify((client, { productId, publishDetails }) => products.publishProduct(client, productId, publishDetails))
   );
 
@@ -275,18 +283,21 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       page: z.number().optional().default(1).describe("Page number"),
       limit: z.number().optional().default(10).describe("Number of blueprints per page (max 100)")
     },
+    READ_ONLY,
     withPrintify((client, { page, limit }) => blueprints.getBlueprints(client, { page, limit }))
   );
 
   server.tool(
     "get_blueprint",
     { blueprintId: z.string().describe("Blueprint ID") },
+    READ_ONLY,
     withPrintify((client, { blueprintId }) => blueprints.getBlueprint(client, blueprintId))
   );
 
   server.tool(
     "get_print_providers",
     { blueprintId: z.string().describe("Blueprint ID") },
+    READ_ONLY,
     withPrintify((client, { blueprintId }) => blueprints.getPrintProviders(client, blueprintId))
   );
 
@@ -298,6 +309,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       page: z.number().optional().default(1).describe("Page number"),
       limit: z.number().optional().default(50).describe("Number of variants per page (max 100)")
     },
+    READ_ONLY,
     withPrintify((client, { blueprintId, printProviderId, page, limit }) =>
       blueprints.getVariants(client, blueprintId, printProviderId, { page, limit }))
   );
@@ -306,12 +318,12 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
     "upload_image",
     {
       fileName: z.string().describe("File name"),
-      url: z.string().describe("URL of the image to upload, path to local file, or base64 encoded image data")
+      url: z.string().describe("URL of the image to upload, path to a local file inside ALLOWED_FILE_DIR, or a data: URL with base64 image data")
     },
     withPrintify((client, { fileName, url }) => {
-      // Full path for files; URLs and base64 are truncated.
+      // A "file" source may be raw base64 of any length, so it is bounded too.
       const sourceType = determineImageSourceType(url);
-      const sourcePreview = sourceType === 'file' ? url : url.substring(0, 30) + '...';
+      const sourcePreview = sourceType === 'file' ? previewText(url) : url.substring(0, 30) + '...';
       console.error(`Attempting to upload image: ${fileName} from ${sourceType} source: ${sourcePreview}`);
 
       return uploadImageToPrintify(client, fileName, url);
@@ -321,6 +333,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
   server.tool(
     "get_defaults",
     {},
+    READ_ONLY,
     async () => {
       try {
         const defaults = defaultsFor(ctx);
@@ -385,6 +398,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
     {
       topic: z.enum(DOC_TOPICS).describe("The topic to get documentation for")
     },
+    READ_ONLY,
     async ({ topic }) => {
       // Resolved from this module's location, independent of the working directory.
       const filePath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'docs', `${topic}.md`);
@@ -486,9 +500,11 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       try {
         image = await uploadGenerated(ctx.printifyClient, finalFileName, imageBuffer, mimeType, staged.method, imageUrl);
       } catch (uploadError: any) {
+        console.error('Error uploading generated image to Printify:', describeError(uploadError));
+        const status = uploadError.response?.status;
         return toolError(`Error uploading to Printify: ${uploadError.message || String(uploadError)}\n\n` +
-                  `Upload method: ${staged.method}${imageUrl ? `\nImgBB URL: ${imageUrl}` : ''}\n\n` +
-                  `Response data: ${JSON.stringify(uploadError.response?.data || {}, null, 2)}`);
+                  `Upload method: ${staged.method}${imageUrl ? `\nImgBB URL: ${imageUrl}` : ''}` +
+                  (status ? `\n\nHTTP status: ${status}` : ''));
       }
 
       return formatSuccessResponse(
@@ -519,11 +535,19 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
     "generate_image",
     {
       prompt: z.string().describe("Text prompt for image generation"),
-      outputPath: z.string().describe("Full path where the generated image should be saved"),
+      outputPath: z.string().describe("Path where the generated image should be saved; must be inside ALLOWED_FILE_DIR (default: the working directory)"),
       ...imageGenerationOptions
     },
-    async ({ prompt, outputPath, ...args }): Promise<ToolResult> => {
+    async ({ prompt, outputPath: rawOutputPath, ...args }): Promise<ToolResult> => {
       if (!ctx.replicateClient) return replicateNotReady();
+
+      // Validated before generating, so a rejected path costs no Replicate spend.
+      let outputPath: string;
+      try {
+        outputPath = validateFilePath(rawOutputPath, 'write');
+      } catch (error: any) {
+        return toolError(error.message);
+      }
 
       console.error(`Starting generate_image with prompt: ${prompt}`);
       console.error(`Output path: ${outputPath}`);
@@ -535,8 +559,24 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       const { buffer: imageBuffer, dimensions } = generated;
 
       try {
+        // Re-validate after the (slow) Replicate call, in case outputPath was
+        // swapped for a symlink out of ALLOWED_FILE_DIR meanwhile.
+        outputPath = validateFilePath(rawOutputPath, 'write');
         ensureDirectoryExists(path.dirname(outputPath));
-        fs.writeFileSync(outputPath, imageBuffer);
+
+        // O_NOFOLLOW makes a symlink swapped in after that check fail with
+        // ELOOP on POSIX. It is undefined on Windows, where the revalidation
+        // above is the only protection.
+        const fd = fs.openSync(
+          outputPath,
+          fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | (fs.constants.O_NOFOLLOW || 0)
+        );
+        try {
+          // writeFileSync loops until the whole buffer is written.
+          fs.writeFileSync(fd, imageBuffer);
+        } finally {
+          fs.closeSync(fd);
+        }
 
         return formatSuccessResponse(
           'Image Generated Successfully',

@@ -134,6 +134,18 @@ describe('generate_and_upload_image', () => {
     expect(res.content[0].text).toMatch(/printify rejected/);
   });
 
+  // The response body can echo request data, so only the status reaches the model.
+  it('reports the HTTP status of an upload failure but not the response body', async () => {
+    const err = Object.assign(new Error('bad request'), { response: { status: 400, data: { secret: 'body-leak' } } });
+    const h = harness({
+      printifyClient: fakePrintify({ uploadImage: vi.fn(async () => { throw err; }) }),
+      replicateClient: fakeReplicate()
+    });
+    const res = await h.call('generate_and_upload_image', { prompt: 'x', fileName: 'f' });
+    expect(res.content[0].text).toContain('HTTP status: 400');
+    expect(res.content[0].text).not.toContain('body-leak');
+  });
+
   it('requires a Replicate client', async () => {
     const h = harness({ printifyClient: fakePrintify(), replicateClient: null });
     const res = await h.call('generate_and_upload_image', { prompt: 'x', fileName: 'f' });
@@ -158,6 +170,77 @@ describe('generate_image', () => {
     expect(res.isError).toBeFalsy();
     expect(fs.existsSync(out)).toBe(true);
     expect((await sharp(out).metadata()).format).toBe('png');
+  });
+
+  it('refuses an output path outside ALLOWED_FILE_DIR', async () => {
+    fs.mkdirSync(scratch, { recursive: true });
+    process.env.ALLOWED_FILE_DIR = scratch;
+    try {
+      const replicate = fakeReplicate();
+      const out = path.join(scratch, '..', '.tmp-escape.png');
+      const res = await harness({ replicateClient: replicate }).call('generate_image', { prompt: 'x', outputPath: out });
+      expect(res.isError).toBe(true);
+      expect(res.content[0].text).toMatch(/outside the allowed directory/);
+      expect(replicate.generateImage).not.toHaveBeenCalled();
+      expect(fs.existsSync(out)).toBe(false);
+    } finally {
+      delete process.env.ALLOWED_FILE_DIR;
+    }
+  });
+
+  // The denial echoes outputPath, which is model-supplied and can be any
+  // length; spaces in it defeat the long-run collapsing. The reply must stay
+  // small and still say why the path was refused.
+  it('bounds the error text when a huge outputPath is refused', async () => {
+    const out = '/outside/' + 'dir with spaces/'.repeat(5_000) + 'x.png';
+    const res = await harness({ replicateClient: fakeReplicate() }).call('generate_image', { prompt: 'x', outputPath: out });
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toMatch(/outside the allowed directory/);
+    expect(res.content[0].text.length).toBeLessThan(1000);
+  });
+
+  // CWE-367: outputPath is validated before the (often slow) Replicate call,
+  // then written after it. On POSIX, O_NOFOLLOW refuses to write through a
+  // symlink swapped in during that window instead of silently following it.
+  it('rejects a symlink swapped in for outputPath during generation', async () => {
+    if (process.platform === 'win32') return; // O_NOFOLLOW is a no-op there; see the comment in tools.ts.
+    fs.mkdirSync(scratch, { recursive: true });
+    const out = path.join(scratch, 'out.png');
+    const target = path.join(scratch, 'target.png');
+    const replicate = fakeReplicate({
+      generateImage: vi.fn(async () => {
+        fs.symlinkSync(target, out); // out doesn't exist yet: validation already ran, the write hasn't.
+        return await png();
+      })
+    });
+    const res = await harness({ replicateClient: replicate }).call('generate_image', { prompt: 'x', outputPath: out });
+    expect(res.isError).toBe(true);
+    expect(fs.existsSync(target)).toBe(false);
+  });
+
+  // The confinement check at the top of the handler is stale by the time the
+  // write happens; re-validating right before the write is what actually
+  // enforces ALLOWED_FILE_DIR if it changes while generation is in flight.
+  it('re-validates against ALLOWED_FILE_DIR right before writing', async () => {
+    fs.mkdirSync(scratch, { recursive: true });
+    process.env.ALLOWED_FILE_DIR = scratch;
+    const out = path.join(scratch, 'out.png');
+    try {
+      const replicate = fakeReplicate({
+        generateImage: vi.fn(async () => {
+          const narrower = path.join(scratch, 'narrower');
+          fs.mkdirSync(narrower, { recursive: true });
+          process.env.ALLOWED_FILE_DIR = narrower; // sandbox narrows mid-flight
+          return await png();
+        })
+      });
+      const res = await harness({ replicateClient: replicate }).call('generate_image', { prompt: 'x', outputPath: out });
+      expect(res.isError).toBe(true);
+      expect(res.content[0].text).toMatch(/outside the allowed directory/);
+      expect(fs.existsSync(out)).toBe(false);
+    } finally {
+      delete process.env.ALLOWED_FILE_DIR;
+    }
   });
 
   it('requires a Replicate client', async () => {
@@ -185,5 +268,25 @@ describe('generate_image', () => {
     const h = harness({ replicateClient: fakeReplicate() });
     const res = await h.call('generate_image', { prompt: 'x', outputPath: path.join(blocker, 'x.png') });
     expect(res.isError).toBe(true);
+  });
+});
+
+describe('upload_image', () => {
+  // Raw base64 is classified as a file path, so the attempt log must bound it
+  // rather than print the whole payload to stderr.
+  it('does not log a huge source in full', async () => {
+    const lines: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...args: any[]) => { lines.push(args.join(' ')); });
+    try {
+      const payload = 'A'.repeat(50_000);
+      // The failed read runs the error path's diagnostics, which need these.
+      const printifyClient = fakePrintify({ getCurrentShopId: () => '1', getAvailableShops: () => [] });
+      await harness({ printifyClient }).call('upload_image', { fileName: 'a.png', url: payload });
+    } finally {
+      spy.mockRestore();
+    }
+    const output = lines.join('\n');
+    expect(output).toContain('Attempting to upload image');
+    expect(output).not.toContain('A'.repeat(2_001));
   });
 });

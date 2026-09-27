@@ -11,7 +11,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Defaults changed with `set_default` for `outputFormat`, `safetyTolerance`,
   `numInferenceSteps`, `guidanceScale` and `negativePrompt` are now applied;
   schema-level defaults previously overrode them on every generation.
-- Upload error reports no longer include the Printify response body and headers.
 
 ### Changed
 - Condensed the README and the `how_to_use` guides; removed the outdated

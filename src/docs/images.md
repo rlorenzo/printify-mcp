@@ -7,7 +7,7 @@ Every uploaded image gets an ID, which you use in a product's `printAreas`.
 ```javascript
 upload_image({ fileName: "front.png", url: "https://example.com/image.png" })   // public URL
 upload_image({ fileName: "front.png", url: "/path/to/image.png" })              // local file
-upload_image({ fileName: "front.png", url: "<base64 data>" })                   // base64
+upload_image({ fileName: "front.png", url: "data:image/png;base64,iVBOR..." })  // base64 data URL
 generate_and_upload_image({ prompt: "blue t-shirt design", fileName: "front.png" })
 ```
 
