@@ -684,3 +684,31 @@ describe('initialize and getShops', () => {
     await expect(instance.getShops()).rejects.toThrow(/boom/);
   });
 });
+
+describe('orders', () => {
+  it('lists, gets and quotes through the SDK', async () => {
+    const list = vi.fn(async () => ({ current_page: 1, data: [] }));
+    const getOne = vi.fn(async (id: string) => ({ id }));
+    const calculateShipping = vi.fn(async () => ({ standard: 1 }));
+    const { instance } = api({ orders: { list, getOne, calculateShipping } });
+    await instance.listOrders({ page: 2, status: 'fulfilled' });
+    await instance.getOrder(' 5a96f649b2439217 ');
+    await instance.calculateOrderShipping({ line_items: [], address_to: { country: 'US' } });
+    expect(list).toHaveBeenCalledWith({ page: 2, status: 'fulfilled' });
+    expect(getOne).toHaveBeenCalledWith('5a96f649b2439217');
+    expect(calculateShipping).toHaveBeenCalledWith({ line_items: [], address_to: { country: 'US' } });
+  });
+
+  // The SDK interpolates the id into the URL unencoded.
+  it.each(['ord/../../products', 'a?b=1', '', 'a b'])('rejects the order id %j before any request', async (bad) => {
+    const getOne = vi.fn();
+    const { instance } = api({ orders: { getOne } });
+    await expect(instance.getOrder(bad)).rejects.toThrow(/orderId must be a plain id/);
+    expect(getOne).not.toHaveBeenCalled();
+  });
+
+  it('needs a shop', async () => {
+    const instance = new PrintifyAPI('test-token');
+    await expect(instance.listOrders()).rejects.toThrow(/Shop ID is not set/);
+  });
+});

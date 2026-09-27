@@ -91,11 +91,14 @@ listed on the [GitHub Releases page](https://github.com/rlorenzo/printify-mcp/re
 | `get_blueprint` | Get a blueprint (`blueprintId`) |
 | `get_print_providers` | Print providers for a blueprint (`blueprintId`) |
 | `get_variants` | Variants for a blueprint and provider (`blueprintId`, `printProviderId`) |
+| `list_orders` | The shop's orders, summarized (`page`, `limit`, optional `status`, `sku`) |
+| `get_order` | One order's items, costs, shipping address and tracking (`orderId`) |
+| `calculate_order_shipping` | Quote shipping per method for items to a destination, without ordering (`lineItems`, `address`) |
 | `upload_image` | Upload from a URL, a local file in `ALLOWED_FILE_DIR`, or a `data:<mime>;base64,...` URL (`fileName`, `url`) |
 | `generate_and_upload_image` | Generate with Flux and upload to Printify (`prompt`, `fileName`, generation options) |
 | `generate_image` | Generate with Flux and save locally (`prompt`, `outputPath`, generation options) |
 | `get_defaults` / `set_default` | View or change default generation options (model, size, aspect ratio, etc.) |
-| `how_to_use` | Workflow guides: `product_creation`, `blueprints`, `print_providers`, `variants`, `images`, `publishing`, `image_generation` |
+| `how_to_use` | Workflow guides: `product_creation`, `blueprints`, `print_providers`, `variants`, `images`, `publishing`, `image_generation`, `orders` |
 
 **Generation options:** `model`, `width`, `height`, `aspectRatio` (overrides
 width/height), `outputFormat`, `numInferenceSteps`, `guidanceScale`,

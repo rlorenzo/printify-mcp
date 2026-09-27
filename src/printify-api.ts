@@ -24,6 +24,19 @@ export function requireShop(client: PrintifyAPI): PrintifyShop {
 }
 
 /**
+ * A resource id checked before the SDK puts it into a URL path. The SDK does
+ * not encode ids, and these come from the model: a value like "abc/../../x"
+ * would otherwise reach a different endpoint with the account's API key.
+ */
+function pathId(value: string | number, label: string): string {
+  const id = String(value ?? '').trim();
+  if (!/^[A-Za-z0-9_-]+$/.test(id)) {
+    throw new Error(`${label} must be a plain id (letters, digits, - or _), got "${String(value ?? '').slice(0, 40)}"`);
+  }
+  return id;
+}
+
+/**
  * Placeholders for one print-area entry. `{ position, imageId }` becomes a
  * centred, unscaled image; placeholders with their own `images` pass through.
  */
@@ -404,6 +417,39 @@ export class PrintifyAPI {
       return await this.client.catalog.getBlueprintVariants(blueprintId, printProviderId);
     } catch (error) {
       console.error(`Error fetching variants for blueprint ${blueprintId} and print provider ${printProviderId}:`, describeError(error));
+      throw error;
+    }
+  }
+
+  /** One page of the current shop's orders, optionally filtered by status or SKU. */
+  async listOrders(options: { page?: number; limit?: number; status?: string; sku?: string } = {}) {
+    const shopId = this.requireShopId();
+    try {
+      return await this.client.orders.list(options);
+    } catch (error) {
+      console.error(`Error fetching orders for shop ${shopId}:`, describeError(error));
+      throw error;
+    }
+  }
+
+  async getOrder(orderId: string) {
+    this.requireShopId();
+    const id = pathId(orderId, 'orderId');
+    try {
+      return await this.client.orders.getOne(id);
+    } catch (error) {
+      console.error(`Error fetching order ${id}:`, describeError(error));
+      throw error;
+    }
+  }
+
+  /** Shipping cost per method for a prospective order; nothing is created. */
+  async calculateOrderShipping(data: any) {
+    this.requireShopId();
+    try {
+      return await this.client.orders.calculateShipping(data);
+    } catch (error) {
+      console.error('Error calculating order shipping:', describeError(error));
       throw error;
     }
   }
