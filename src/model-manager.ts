@@ -151,11 +151,13 @@ export class DefaultsManager {
 
     if (options.seed !== undefined) input.seed = options.seed;
 
-    input.num_inference_steps = options.numInferenceSteps || this.defaults.numInferenceSteps;
-    input.guidance_scale = options.guidanceScale || this.defaults.guidanceScale;
-    input.negative_prompt = options.negativePrompt || this.defaults.negativePrompt;
+    // ?? rather than ||: an explicit falsy value (negativePrompt: "" to clear
+    // the stored one) is the caller's choice, not a missing option.
+    input.num_inference_steps = options.numInferenceSteps ?? this.defaults.numInferenceSteps;
+    input.guidance_scale = options.guidanceScale ?? this.defaults.guidanceScale;
+    input.negative_prompt = options.negativePrompt ?? this.defaults.negativePrompt;
 
-    input.output_format = options.outputFormat || this.defaults.outputFormat;
+    input.output_format = options.outputFormat ?? this.defaults.outputFormat;
 
     input.safety_tolerance = options.safetyTolerance !== undefined ?
       options.safetyTolerance : this.defaults.safetyTolerance;
