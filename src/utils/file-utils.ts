@@ -153,6 +153,17 @@ export function validateFilePath(filePath: string, operation: 'read' | 'write'):
 }
 
 /**
+ * Turn a caller-supplied file source into a path: strip a file:// scheme
+ * (file:///Users/x is the absolute path /Users/x, so its own slash stays) and
+ * the leading slash of a Windows drive path from a file:// URI (/C:/x -> C:/x).
+ * One rule on every platform, so every caller accepts the same inputs.
+ */
+export function normalizeFileUri(source: string): string {
+  const filePath = source.startsWith('file://') ? source.slice('file://'.length) : source;
+  return /^\/[a-zA-Z]:[\\/]/.test(filePath) ? filePath.substring(1) : filePath;
+}
+
+/**
  * Open a file confined to ALLOWED_FILE_DIR, checking the file actually opened
  * rather than only the path. The caller owns the returned descriptor and must
  * close it.

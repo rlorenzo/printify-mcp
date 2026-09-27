@@ -2,8 +2,11 @@ import * as path from 'path';
 import Printify from 'printify-sdk-js';
 import sharp from 'sharp';
 import { describeError, previewText } from './utils/error-handler.js';
-import { readConfinedFile } from './utils/file-utils.js';
+import { normalizeFileUri, readConfinedFile } from './utils/file-utils.js';
 import { applyOutputFormat, mimeTypeFor } from './services/image-format.js';
+
+/** Largest local file an upload will read; the uploader's pre-check uses the same limit. */
+export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 export interface PrintifyShop {
   id: number;
@@ -465,20 +468,14 @@ export class PrintifyAPI {
   /** Read a local image, normalize it with Sharp, and upload it as base64. */
   private async uploadFile(fileName: string, source: string) {
     try {
-      // Strip only the scheme: file:///Users/x is the absolute path /Users/x.
-      let filePath = source.startsWith('file://') ? source.slice('file://'.length) : source;
-
-      // Windows paths from file:// URIs look like /C:/...; POSIX paths keep their slash.
-      if (/^\/[a-zA-Z]:[\\/]/.test(filePath)) {
-        filePath = filePath.substring(1);
-      }
+      let filePath = normalizeFileUri(source);
 
       console.error(`Reading image file: ${previewText(filePath)}`);
 
       // Every local read ends here, so this confinement check holds even for
       // callers that skip uploadImageToPrintify's validation. The file is read
       // through one descriptor and never reopened by name.
-      const { resolved, data } = readConfinedFile(filePath, 10 * 1024 * 1024);
+      const { resolved, data } = readConfinedFile(filePath, MAX_UPLOAD_BYTES);
 
       const ext = path.extname(resolved).toLowerCase();
       const outputFormat = ext === '.jpg' || ext === '.jpeg' ? 'jpeg' : 'png';

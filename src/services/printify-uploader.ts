@@ -3,26 +3,10 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
-import { PrintifyAPI, requireShop } from '../printify-api.js';
+import { MAX_UPLOAD_BYTES, PrintifyAPI, requireShop } from '../printify-api.js';
 import { describeError, formatErrorResponse, formatSuccessResponse, previewText, TIPS } from '../utils/error-handler.js';
-import { getFileInfo, openConfined, validateFilePath } from '../utils/file-utils.js';
+import { normalizeFileUri, openConfined, validateFilePath } from '../utils/file-utils.js';
 import { saveDebugCopy } from './image-format.js';
-
-/** Strip a file:// scheme (keeping the path's own leading slash). */
-function normalizeFilePath(filePath: string): string {
-  let normalizedPath = filePath;
-
-  if (normalizedPath.startsWith('file://')) {
-    normalizedPath = normalizedPath.slice('file://'.length);
-  }
-
-  // Handle leading slash on Windows
-  if (process.platform === 'win32' && normalizedPath.startsWith('/')) {
-    normalizedPath = normalizedPath.substring(1);
-  }
-
-  return normalizedPath;
-}
 
 /**
  * Attach file diagnostics for a failed file upload. The file is inspected only
@@ -34,7 +18,7 @@ function normalizeFilePath(filePath: string): string {
 async function addFileDiagnostics(diagnosticInfo: any, source: string): Promise<void> {
   let handle: ReturnType<typeof openConfined>;
   try {
-    handle = openConfined(normalizeFilePath(source));
+    handle = openConfined(normalizeFileUri(source));
   } catch (error: any) {
     if (error?.cause?.code === 'ENOENT') {
       diagnosticInfo.FileExists = false;
@@ -106,19 +90,27 @@ async function verifyFileReadable(filePath: string, shown: string): Promise<void
     // lookups, so the file cannot be swapped between check and use -- the
     // debug copy below writes its bytes out, so it must be the file checked.
     let fd: number;
+    let stats: fs.Stats;
     try {
-      ({ fd } = openConfined(filePath));
+      ({ fd, stats } = openConfined(filePath));
     } catch (openError: any) {
       if (openError?.cause?.code === 'ENOENT') {
-        console.error(`ERROR: File does not exist at upload time: ${filePath}`);
-        throw new Error(`File does not exist at upload time: ${shown}`, { cause: openError });
+        console.error(`ERROR: File not found: ${filePath}`);
+        throw new Error(`File not found: ${shown}`, { cause: openError });
       }
       console.error(`ERROR: File is not readable at upload time: ${filePath}`);
       throw new Error(`File is not readable at upload time: ${shown}`, { cause: openError });
     }
 
     try {
-      const stats = fs.fstatSync(fd);
+      // Same limit PrintifyAPI.uploadFile enforces, checked on the open file
+      // before the debug copy below reads all of it into memory.
+      if (stats.size > MAX_UPLOAD_BYTES) {
+        throw new Error(
+          `File is too large (${Math.round(stats.size / (1024 * 1024))}MB). ` +
+          `Maximum size is ${Math.round(MAX_UPLOAD_BYTES / (1024 * 1024))}MB.`
+        );
+      }
       console.error(`File verification before upload:`);
       console.error(`- Path: ${filePath}`);
       console.error(`- Absolute path: ${path.resolve(filePath)}`);
@@ -163,24 +155,13 @@ export async function uploadImageToPrintify(
     let image;
 
     if (sourceType === 'file') {
-      const requested = normalizeFilePath(source);
+      const requested = normalizeFileUri(source);
       const filePath = validateFilePath(requested, 'read');
       // Errors quote the path as the caller gave it: they reach the model,
       // and the resolved form of a relative path reveals the cwd.
       const shown = previewText(requested);
 
-      const fileInfo = getFileInfo(filePath);
-      if (!fileInfo.exists) {
-        throw new Error(`File not found: ${shown}`);
-      }
-
       console.error(`Uploading file to Printify: ${filePath}`);
-      console.error(`File size: ${fileInfo.size} bytes`);
-
-      if (fileInfo.size && fileInfo.size > 20 * 1024 * 1024) {
-        throw new Error(`File is too large (${Math.round(fileInfo.size / (1024 * 1024))}MB). Maximum size is 20MB.`);
-      }
-
       await verifyFileReadable(filePath, shown);
 
       console.error(`Attempting to upload file to Printify: ${filePath}`);

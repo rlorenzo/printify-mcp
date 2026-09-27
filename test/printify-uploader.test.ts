@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import sharp from 'sharp';
 import { determineImageSourceType, uploadImageToPrintify } from '../src/services/printify-uploader.js';
+import { MAX_UPLOAD_BYTES } from '../src/printify-api.js';
 
 const scratch = path.join(process.cwd(), '.tmp-upl-test');
 afterEach(() => fs.rmSync(scratch, { recursive: true, force: true }));
@@ -82,13 +83,27 @@ describe('uploadImageToPrintify', () => {
     expect(JSON.stringify(r.errorResponse)).toMatch(/outside the allowed directory/);
   });
 
-  it('rejects a file over the 20MB limit', async () => {
+  // The pre-check uses PrintifyAPI's own limit; it once allowed 20MB, which
+  // the real read then rejected anyway.
+  it('rejects a file over the upload limit before uploading', async () => {
     fs.mkdirSync(scratch, { recursive: true });
     const f = path.join(scratch, 'big.png');
-    fs.writeFileSync(f, Buffer.alloc(20 * 1024 * 1024 + 1, 1));
-    const r = await uploadImageToPrintify(client(), 'big.png', f);
+    fs.writeFileSync(f, Buffer.alloc(MAX_UPLOAD_BYTES + 1, 1));
+    const c = client();
+    const r = await uploadImageToPrintify(c, 'big.png', f);
     expect(r.success).toBe(false);
-    expect(JSON.stringify(r.errorResponse)).toMatch(/too large/);
+    expect(JSON.stringify(r.errorResponse)).toMatch(/too large.*Maximum size is 10MB/);
+    expect(c.uploadImage).not.toHaveBeenCalled();
+  });
+
+  // file:///C:/... must mean the same path here as in PrintifyAPI on every
+  // platform; the uploader once kept the slash on POSIX and refused it as an
+  // absolute path outside the sandbox.
+  it('accepts a file:// URI with a Windows drive path like PrintifyAPI does', async () => {
+    const r = await uploadImageToPrintify(client(), 'w.png', 'file:///C:/nope/missing.png');
+    const text = JSON.stringify(r.errorResponse);
+    expect(text).not.toMatch(/outside the allowed directory/);
+    expect(text).toContain('File not found: C:/nope/missing.png');
   });
 
   it('surfaces an SDK upload failure', async () => {
