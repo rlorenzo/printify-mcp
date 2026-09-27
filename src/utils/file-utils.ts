@@ -169,6 +169,9 @@ export function validateFilePath(filePath: string, operation: 'read' | 'write'):
  * On a filesystem that reports no inode numbers (0 for both sides) the
  * identity check cannot tell files apart and the re-validation is what
  * remains.
+ *
+ * Error messages quote `filePath` as the caller gave it, never `resolved`:
+ * they can reach the model, and resolving a relative path prefixes the cwd.
  */
 export function openConfined(filePath: string): { fd: number; resolved: string; stats: fs.Stats } {
   const resolved = validateFilePath(filePath, 'read');
@@ -178,7 +181,7 @@ export function openConfined(filePath: string): { fd: number; resolved: string; 
     fd = fs.openSync(resolved, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
   } catch (error: any) {
     if (error?.code === 'ENOENT') {
-      throw new Error(`File not found: ${previewText(resolved)}`, { cause: error });
+      throw new Error(`File not found: ${previewText(filePath)}`, { cause: error });
     }
     if (error?.code === 'ELOOP') {
       throw new Error(`File read denied: "${previewText(filePath)}" is a symbolic link.`, { cause: error });
@@ -208,10 +211,10 @@ export function readConfinedFile(filePath: string, maxBytes: number): { resolved
   const { fd, resolved, stats } = openConfined(filePath);
   try {
     if (!stats.isFile()) {
-      throw new Error(`Not a regular file: ${previewText(resolved)}`);
+      throw new Error(`Not a regular file: ${previewText(filePath)}`);
     }
     if (stats.size === 0) {
-      throw new Error(`File is empty: ${previewText(resolved)}`);
+      throw new Error(`File is empty: ${previewText(filePath)}`);
     }
     if (stats.size > maxBytes) {
       throw new Error(

@@ -166,6 +166,16 @@ describe('uploadImageToPrintify diagnostics', () => {
     expect(text).not.toContain(process.cwd());
   });
 
+  // The error quotes the path as given: the resolved form of a relative path
+  // would reveal the server's working directory. (A directory or empty file
+  // is refused by PrintifyAPI.uploadImage; printify-api.test.ts covers those.)
+  it('keeps the working directory out of the error for a missing file', async () => {
+    fs.mkdirSync(scratch, { recursive: true });
+    const r = await uploadImageToPrintify(client(), 'x.png', path.join('.tmp-upl-test', 'gone.png'));
+    expect(r.success).toBe(false);
+    expect(JSON.stringify(r.errorResponse)).not.toContain(process.cwd());
+  });
+
   it('reports file diagnostics when a file upload fails', async () => {
     const f = await pngFile('fails.png');
     const c = client({ uploadImage: vi.fn(async () => { throw new Error('nope'); }) });

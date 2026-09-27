@@ -100,7 +100,7 @@ export function determineImageSourceType(source: string): 'url' | 'file' | 'base
  * Confirm a file is present and readable before upload, logging what was seen,
  * so a file that vanished since validation fails with a clear message.
  */
-async function verifyFileReadable(filePath: string): Promise<void> {
+async function verifyFileReadable(filePath: string, shown: string): Promise<void> {
   try {
     // Inspect through one confined descriptor rather than separate path
     // lookups, so the file cannot be swapped between check and use -- the
@@ -111,10 +111,10 @@ async function verifyFileReadable(filePath: string): Promise<void> {
     } catch (openError: any) {
       if (openError?.cause?.code === 'ENOENT') {
         console.error(`ERROR: File does not exist at upload time: ${filePath}`);
-        throw new Error(`File does not exist at upload time: ${filePath}`, { cause: openError });
+        throw new Error(`File does not exist at upload time: ${shown}`, { cause: openError });
       }
       console.error(`ERROR: File is not readable at upload time: ${filePath}`);
-      throw new Error(`File is not readable at upload time: ${filePath}`, { cause: openError });
+      throw new Error(`File is not readable at upload time: ${shown}`, { cause: openError });
     }
 
     try {
@@ -163,11 +163,15 @@ export async function uploadImageToPrintify(
     let image;
 
     if (sourceType === 'file') {
-      const filePath = validateFilePath(normalizeFilePath(source), 'read');
+      const requested = normalizeFilePath(source);
+      const filePath = validateFilePath(requested, 'read');
+      // Errors quote the path as the caller gave it: they reach the model,
+      // and the resolved form of a relative path reveals the cwd.
+      const shown = previewText(requested);
 
       const fileInfo = getFileInfo(filePath);
       if (!fileInfo.exists) {
-        throw new Error(`File not found: ${filePath}`);
+        throw new Error(`File not found: ${shown}`);
       }
 
       console.error(`Uploading file to Printify: ${filePath}`);
@@ -177,7 +181,7 @@ export async function uploadImageToPrintify(
         throw new Error(`File is too large (${Math.round(fileInfo.size / (1024 * 1024))}MB). Maximum size is 20MB.`);
       }
 
-      await verifyFileReadable(filePath);
+      await verifyFileReadable(filePath, shown);
 
       console.error(`Attempting to upload file to Printify: ${filePath}`);
       image = await printifyClient.uploadImage(fileName, filePath);
