@@ -105,8 +105,15 @@ describe('uploadImageToPrintify', () => {
   it('accepts a file:// URI with a Windows drive path like PrintifyAPI does', async () => {
     const r = await uploadImageToPrintify(client(), 'w.png', 'file:///C:/nope/missing.png');
     const text = JSON.stringify(r.errorResponse);
-    expect(text).not.toMatch(/outside the allowed directory/);
-    expect(text).toContain('File not found: C:/nope/missing.png');
+    expect(text).not.toContain('found: /C:/nope');
+    if (path.isAbsolute('C:/nope/missing.png')) {
+      // Windows: a drive path is absolute, so outside the allowed directory.
+      expect(text).toMatch(/outside the allowed directory/);
+    } else {
+      // POSIX: a relative path inside it, just missing.
+      expect(text).not.toMatch(/outside the allowed directory/);
+      expect(text).toContain('File not found: C:/nope/missing.png');
+    }
   });
 
   it('surfaces an SDK upload failure', async () => {

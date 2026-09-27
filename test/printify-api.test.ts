@@ -591,10 +591,15 @@ describe('uploadImage file validation', () => {
   it('strips the leading slash only from a /C:/ style path', async () => {
     const { instance } = api();
     const err = await instance.uploadImage('w.png', 'file:///C:/nope/missing.png').catch((e: Error) => e);
-    // Stripped, C:/nope/missing.png is a relative path inside the allowed
-    // directory that simply isn't there. Unstripped, /C:/... would be an
-    // absolute path outside it and be refused instead.
-    expect(err.message).toContain('File not found: C:/nope/missing.png');
+    // Either way the slash is gone: the path is quoted as C:/..., never /C:/...
+    if (path.isAbsolute('C:/nope/missing.png')) {
+      // Windows: C:/... is an absolute path outside the allowed directory.
+      expect(err.message).toContain('"C:/nope/missing.png" is outside the allowed directory');
+    } else {
+      // POSIX: C:/... is a relative path inside it that simply isn't there.
+      // Unstripped, /C:/... would be absolute and refused instead.
+      expect(err.message).toContain('File not found: C:/nope/missing.png');
+    }
   });
 
   // The thrown message reaches the model; a relative input must not come
