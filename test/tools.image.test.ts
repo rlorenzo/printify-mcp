@@ -172,6 +172,17 @@ describe('generate_image', () => {
     expect((await sharp(out).metadata()).format).toBe('png');
   });
 
+  // The reply names the file written, not the generator's own name for it
+  // (which carries the output format's extension).
+  it('reports the file name of the saved path', async () => {
+    fs.mkdirSync(scratch, { recursive: true });
+    const out = path.join(scratch, 'saved.jpg');
+    const h = harness({ replicateClient: fakeReplicate() });
+    const res = await h.call('generate_image', { prompt: 'x', outputPath: out, outputFormat: 'png' });
+    expect(res.isError).toBeFalsy();
+    expect(res.content[0].text).toContain('**File Name**: "saved.jpg"');
+  });
+
   // Explicit width/height drop the aspect ratio; the reply must not then claim
   // the image was generated at 1:1.
   it('reports an aspect ratio only when one was used', async () => {

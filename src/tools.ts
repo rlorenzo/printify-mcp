@@ -584,7 +584,9 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
             Prompt: prompt,
             Model: generated.model.split('/')[1],
             'Output Path': outputPath,
-            'File Name': generated.fileName,
+            // The file actually written; generated.fileName carries the
+            // format's extension, which outputPath need not.
+            'File Name': path.basename(outputPath),
             'File Size': `${imageBuffer.length} bytes`,
             'Dimensions': dimensions,
             'Format': options.outputFormat,
