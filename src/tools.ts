@@ -358,7 +358,7 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
         lastName: z.string().optional().describe("Recipient last name"),
         email: z.string().optional().describe("Recipient email"),
         phone: z.string().optional().describe("Recipient phone")
-      }).describe("Destination address; country and zip are usually enough for a quote")
+      }).describe("Destination address. Printify may reject a partial address, so give the full recipient address when you have it")
     },
     // Quotes only: the endpoint is a POST but creates nothing.
     READ_ONLY,

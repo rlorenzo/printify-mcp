@@ -96,7 +96,7 @@ describe('calculateOrderShipping', () => {
     );
     expect(sent).toEqual({
       line_items: [{ product_id: 'p1', variant_id: 18100, quantity: 2 }, { sku: 'SKU-2', quantity: 1 }],
-      address_to: { country: 'US', zip: '11221' }
+      address_to: { country: 'US', region: '', zip: '11221' }
     });
   });
 
