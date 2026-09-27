@@ -25,4 +25,19 @@ describe('runService', () => {
     expect(r.errorResponse.content[0].text).toContain('Fetch Thing');
     expect(r.errorResponse.content[0].text).toContain('boom');
   });
+
+  // The context builder reads live state the failure may have broken; a
+  // throw there must not replace the original error.
+  it('still reports the original error when the context builder throws', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const r = await runService(
+      'Fetch Thing',
+      { context: () => { throw new Error('context broke'); } },
+      async () => { throw new Error('original failure'); }
+    );
+    expect(r.success).toBe(false);
+    if (r.success) return;
+    expect(r.errorResponse.content[0].text).toContain('original failure');
+    expect(r.errorResponse.content[0].text).not.toContain('context broke');
+  });
 });

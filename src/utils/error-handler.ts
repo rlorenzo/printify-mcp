@@ -231,10 +231,19 @@ export async function runService<T extends { response: any; success?: never }>(
     return { ...(await fn()), success: true };
   } catch (error: any) {
     console.error(`Error in ${step}:`, describeError(error));
+    // The context builder reads live state that the failure may have left
+    // broken; if it throws, report the original error without context rather
+    // than losing it.
+    let context: Record<string, any> = {};
+    try {
+      context = onError.context?.() ?? {};
+    } catch (contextError) {
+      console.error(`Error building context for ${step}:`, describeError(contextError));
+    }
     return {
       success: false,
       error,
-      errorResponse: formatErrorResponse(error, step, onError.context?.() ?? {}, onError.tips ?? [])
+      errorResponse: formatErrorResponse(error, step, context, onError.tips ?? [])
     };
   }
 }
