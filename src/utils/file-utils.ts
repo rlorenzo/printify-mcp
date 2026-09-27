@@ -217,6 +217,15 @@ export function openConfined(filePath: string): { fd: number; resolved: string; 
   }
 }
 
+/**
+ * The "file too large" error. Exact byte counts on both sides: rounding to MB
+ * turned a file 1 byte over a 10MB limit into "10MB. Maximum size is 10MB".
+ */
+export function fileTooLargeMessage(size: number, maxBytes: number): string {
+  return `File is too large (${size} bytes). Maximum size is ${maxBytes} bytes ` +
+    `(${(maxBytes / (1024 * 1024)).toFixed(0)}MB).`;
+}
+
 /** Read a whole file through openConfined, refusing non-files, empty files and files over maxBytes. */
 export function readConfinedFile(filePath: string, maxBytes: number): { resolved: string; data: Buffer } {
   const { fd, resolved, stats } = openConfined(filePath);
@@ -228,10 +237,7 @@ export function readConfinedFile(filePath: string, maxBytes: number): { resolved
       throw new Error(`File is empty: ${previewText(filePath)}`);
     }
     if (stats.size > maxBytes) {
-      throw new Error(
-        `File is too large (${Math.round(stats.size / (1024 * 1024))}MB). ` +
-        `Maximum size is ${Math.round(maxBytes / (1024 * 1024))}MB.`
-      );
+      throw new Error(fileTooLargeMessage(stats.size, maxBytes));
     }
     return { resolved, data: fs.readFileSync(fd) };
   } finally {

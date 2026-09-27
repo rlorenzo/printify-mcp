@@ -172,6 +172,21 @@ describe('generate_image', () => {
     expect((await sharp(out).metadata()).format).toBe('png');
   });
 
+  // Explicit width/height drop the aspect ratio; the reply must not then claim
+  // the image was generated at 1:1.
+  it('reports an aspect ratio only when one was used', async () => {
+    fs.mkdirSync(scratch, { recursive: true });
+    const out = path.join(scratch, 'sized.png');
+    const h = harness({ replicateClient: fakeReplicate() });
+
+    const sized = await h.call('generate_image', { prompt: 'x', outputPath: out, width: 512, height: 768 });
+    expect(sized.isError).toBeFalsy();
+    expect(sized.content[0].text).not.toContain('Aspect Ratio');
+
+    const ratio = await h.call('generate_image', { prompt: 'x', outputPath: out, aspectRatio: '16:9' });
+    expect(ratio.content[0].text).toMatch(/Aspect Ratio.*16:9/);
+  });
+
   it('refuses an output path outside ALLOWED_FILE_DIR', async () => {
     fs.mkdirSync(scratch, { recursive: true });
     process.env.ALLOWED_FILE_DIR = scratch;

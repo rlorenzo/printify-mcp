@@ -580,7 +580,10 @@ describe('uploadImage file validation', () => {
     const f = path.join(scratch, 'huge.png');
     fs.writeFileSync(f, Buffer.alloc(10 * 1024 * 1024 + 1, 1));
     const { instance } = api();
-    await expect(instance.uploadImage('huge.png', f)).rejects.toThrow(/too large/);
+    const err = await instance.uploadImage('huge.png', f).catch((e: Error) => e);
+    expect((err.cause as Error).message).toBe(
+      'File is too large (10485761 bytes). Maximum size is 10485760 bytes (10MB).'
+    );
   });
 
   // A Windows file:// URI carries its drive letter behind a leading slash,

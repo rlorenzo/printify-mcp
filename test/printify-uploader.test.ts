@@ -92,7 +92,10 @@ describe('uploadImageToPrintify', () => {
     const c = client();
     const r = await uploadImageToPrintify(c, 'big.png', f);
     expect(r.success).toBe(false);
-    expect(JSON.stringify(r.errorResponse)).toMatch(/too large.*Maximum size is 10MB/);
+    // Exact bytes: rounded MB made a file 1 byte over read "10MB. Maximum size is 10MB".
+    expect(JSON.stringify(r.errorResponse)).toContain(
+      `File is too large (${MAX_UPLOAD_BYTES + 1} bytes). Maximum size is ${MAX_UPLOAD_BYTES} bytes (10MB).`
+    );
     expect(c.uploadImage).not.toHaveBeenCalled();
   });
 

@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { MAX_UPLOAD_BYTES, PrintifyAPI, requireShop } from '../printify-api.js';
 import { describeError, formatErrorResponse, formatSuccessResponse, previewText, TIPS } from '../utils/error-handler.js';
-import { normalizeFileUri, openConfined, validateFilePath } from '../utils/file-utils.js';
+import { fileTooLargeMessage, normalizeFileUri, openConfined, validateFilePath } from '../utils/file-utils.js';
 import { saveDebugCopy } from './image-format.js';
 
 /**
@@ -106,10 +106,7 @@ async function verifyFileReadable(filePath: string, shown: string): Promise<void
       // Same limit PrintifyAPI.uploadFile enforces, checked on the open file
       // before the debug copy below reads all of it into memory.
       if (stats.size > MAX_UPLOAD_BYTES) {
-        throw new Error(
-          `File is too large (${Math.round(stats.size / (1024 * 1024))}MB). ` +
-          `Maximum size is ${Math.round(MAX_UPLOAD_BYTES / (1024 * 1024))}MB.`
-        );
+        throw new Error(fileTooLargeMessage(stats.size, MAX_UPLOAD_BYTES));
       }
       console.error(`File verification before upload:`);
       console.error(`- Path: ${filePath}`);

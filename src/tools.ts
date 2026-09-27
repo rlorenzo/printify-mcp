@@ -589,7 +589,9 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
             'Dimensions': dimensions,
             'Format': options.outputFormat,
             'Generation Parameters': {
-              'Aspect Ratio': options.aspectRatio || '1:1',
+              // Only when one was used: explicit width/height drop the ratio,
+              // and reporting "1:1" then would describe an image not made.
+              ...(options.aspectRatio ? { 'Aspect Ratio': options.aspectRatio } : {}),
               'Inference Steps': options.numInferenceSteps,
               'Guidance Scale': options.guidanceScale,
               'Negative Prompt': options.negativePrompt,
