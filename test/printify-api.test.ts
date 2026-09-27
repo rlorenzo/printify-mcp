@@ -684,3 +684,29 @@ describe('initialize and getShops', () => {
     await expect(instance.getShops()).rejects.toThrow(/boom/);
   });
 });
+
+describe('publish status', () => {
+  it('reports success, failure and unpublishing through the SDK', async () => {
+    const setPublishSucceeded = vi.fn(async () => undefined);
+    const setPublishFailed = vi.fn(async () => undefined);
+    const notifyUnpublished = vi.fn(async () => undefined);
+    const { instance } = api({ products: { setPublishSucceeded, setPublishFailed, notifyUnpublished } });
+    await instance.setPublishSucceeded('p1', { id: 'e1', handle: 'https://shop.test/e1' });
+    await instance.setPublishFailed('p1', 'timed out');
+    await instance.notifyUnpublished('p1');
+    expect(setPublishSucceeded).toHaveBeenCalledWith('p1', { external: { id: 'e1', handle: 'https://shop.test/e1' } });
+    expect(setPublishFailed).toHaveBeenCalledWith('p1', { reason: 'timed out' });
+    expect(notifyUnpublished).toHaveBeenCalledWith('p1');
+  });
+
+  // The SDK interpolates the id into the URL unencoded.
+  it.each(['p1/../../orders', 'p1?x=1'])('rejects the product id %j before any request', async (bad) => {
+    const setPublishFailed = vi.fn();
+    const notifyUnpublished = vi.fn();
+    const { instance } = api({ products: { setPublishFailed, notifyUnpublished } });
+    await expect(instance.setPublishFailed(bad, 'x')).rejects.toThrow(/productId must be a plain id/);
+    await expect(instance.notifyUnpublished(bad)).rejects.toThrow(/productId must be a plain id/);
+    expect(setPublishFailed).not.toHaveBeenCalled();
+    expect(notifyUnpublished).not.toHaveBeenCalled();
+  });
+});

@@ -278,6 +278,35 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
   );
 
   server.tool(
+    "set_publish_succeeded",
+    {
+      productId: z.string().describe("Printify product ID"),
+      externalId: z.string().describe("The product's id in the custom sales channel"),
+      handle: z.string().describe("The product's URL in the custom sales channel")
+    },
+    { title: "Mark publish succeeded (custom channels)", destructiveHint: false, idempotentHint: true },
+    withPrintify((client, { productId, externalId, handle }) =>
+      products.setPublishSucceeded(client, productId, { id: externalId, handle }))
+  );
+
+  server.tool(
+    "set_publish_failed",
+    {
+      productId: z.string().describe("Printify product ID"),
+      reason: z.string().describe("Why publishing failed, e.g. \"Request timed out\"")
+    },
+    { title: "Mark publish failed (custom channels)", destructiveHint: false, idempotentHint: true },
+    withPrintify((client, { productId, reason }) => products.setPublishFailed(client, productId, reason))
+  );
+
+  server.tool(
+    "notify_unpublished",
+    { productId: z.string().describe("Printify product ID") },
+    { title: "Mark product unpublished (custom channels)", destructiveHint: true, idempotentHint: true },
+    withPrintify((client, { productId }) => products.notifyUnpublished(client, productId))
+  );
+
+  server.tool(
     "get_blueprints",
     {
       page: z.number().optional().default(1).describe("Page number"),

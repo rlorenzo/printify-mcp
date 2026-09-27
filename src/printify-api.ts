@@ -24,6 +24,19 @@ export function requireShop(client: PrintifyAPI): PrintifyShop {
 }
 
 /**
+ * A resource id checked before the SDK puts it into a URL path. The SDK does
+ * not encode ids, and these come from the model: a value like "abc/../../x"
+ * would otherwise reach a different endpoint with the account's API key.
+ */
+function pathId(value: string | number, label: string): string {
+  const id = String(value ?? '').trim();
+  if (!/^[A-Za-z0-9_-]+$/.test(id)) {
+    throw new Error(`${label} must be a plain id (letters, digits, - or _), got "${String(value ?? '').slice(0, 40)}"`);
+  }
+  return id;
+}
+
+/**
  * Placeholders for one print-area entry. `{ position, imageId }` becomes a
  * centred, unscaled image; placeholders with their own `images` pass through.
  */
@@ -404,6 +417,45 @@ export class PrintifyAPI {
       return await this.client.catalog.getBlueprintVariants(blueprintId, printProviderId);
     } catch (error) {
       console.error(`Error fetching variants for blueprint ${blueprintId} and print provider ${printProviderId}:`, describeError(error));
+      throw error;
+    }
+  }
+
+  /**
+   * Tell Printify a publish finished on a custom sales channel, recording the
+   * product's id and URL there. Clears the product's "publishing" lock.
+   */
+  async setPublishSucceeded(productId: string, external: { id: string; handle: string }) {
+    this.requireShopId();
+    const id = pathId(productId, 'productId');
+    try {
+      return await this.client.products.setPublishSucceeded(id, { external });
+    } catch (error) {
+      console.error(`Error marking product ${id} as published:`, describeError(error));
+      throw error;
+    }
+  }
+
+  /** Tell Printify a publish failed on a custom sales channel. Clears the lock. */
+  async setPublishFailed(productId: string, reason: string) {
+    this.requireShopId();
+    const id = pathId(productId, 'productId');
+    try {
+      return await this.client.products.setPublishFailed(id, { reason });
+    } catch (error) {
+      console.error(`Error marking product ${id} as failed to publish:`, describeError(error));
+      throw error;
+    }
+  }
+
+  /** Tell Printify a product was taken down from the sales channel. */
+  async notifyUnpublished(productId: string) {
+    this.requireShopId();
+    const id = pathId(productId, 'productId');
+    try {
+      return await this.client.products.notifyUnpublished(id);
+    } catch (error) {
+      console.error(`Error marking product ${id} as unpublished:`, describeError(error));
       throw error;
     }
   }

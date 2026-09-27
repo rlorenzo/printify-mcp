@@ -12,3 +12,13 @@
   ```
 
 Managing products: `get_product`, `update_product`, `delete_product`, `list_products`.
+
+## Custom (API) sales channels
+
+Shopify, Etsy and similar channels report the result of a publish themselves. A custom channel connected through the API must report it, or the product stays locked as "publishing" in Printify:
+
+```javascript
+set_publish_succeeded({ productId: "p1", externalId: "5941187e", handle: "https://example.com/products/p1" })
+set_publish_failed({ productId: "p1", reason: "Request timed out" })
+notify_unpublished({ productId: "p1" })   // the listing was taken down
+```

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `set_publish_succeeded`, `set_publish_failed` and `notify_unpublished`
+  report publishing results for custom (API) sales channels, so products do
+  not stay locked as "publishing".
+
 ### Fixed
 - Defaults changed with `set_default` for `outputFormat`, `safetyTolerance`,
   `numInferenceSteps`, `guidanceScale` and `negativePrompt` are now applied;

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { listProducts, getProduct } from '../src/services/printify-products.js';
+import { listProducts, getProduct, setPublishSucceeded, setPublishFailed, notifyUnpublished } from '../src/services/printify-products.js';
 
 function fakeClient(overrides: Record<string, any> = {}) {
   return {
@@ -208,5 +208,51 @@ describe('getProduct', () => {
     const client = productClient(fakeProduct(), { getCurrentShop: () => null });
     const result = await getProduct(client, 'prod1');
     expect(result.success).toBe(false);
+  });
+});
+
+describe('publish status for custom sales channels', () => {
+  const client = (overrides: Record<string, any> = {}) => ({
+    getCurrentShop: () => ({ id: 1, title: 'Test Shop' }),
+    setPublishSucceeded: async () => undefined,
+    setPublishFailed: async () => undefined,
+    notifyUnpublished: async () => undefined,
+    ...overrides
+  }) as any;
+
+  it('records the external id and handle on success', async () => {
+    let seen: any[] = [];
+    const c = client({ setPublishSucceeded: async (...args: any[]) => { seen = args; } });
+    const text = (await setPublishSucceeded(c, 'p1', { id: 'ext-9', handle: 'https://shop.test/p/9' })).response!.content[0].text;
+    expect(seen).toEqual(['p1', { id: 'ext-9', handle: 'https://shop.test/p/9' }]);
+    expect(text).toContain('**Handle**: "https://shop.test/p/9"');
+  });
+
+  it('records a failure reason', async () => {
+    let seen: any[] = [];
+    const c = client({ setPublishFailed: async (...args: any[]) => { seen = args; } });
+    const text = (await setPublishFailed(c, 'p1', 'Request timed out')).response!.content[0].text;
+    expect(seen).toEqual(['p1', 'Request timed out']);
+    expect(text).toContain('can be edited or published again');
+  });
+
+  it('marks a product unpublished', async () => {
+    let seen = '';
+    const c = client({ notifyUnpublished: async (id: string) => { seen = id; } });
+    expect((await notifyUnpublished(c, 'p1')).success).toBe(true);
+    expect(seen).toBe('p1');
+  });
+
+  it('explains these are for custom channels when a call fails', async () => {
+    const c = client({ setPublishFailed: async () => { throw new Error('Printify SDK: 404 Not Found'); } });
+    const result = await setPublishFailed(c, 'p1', 'x');
+    expect(result.success).toBe(false);
+    expect(result.errorResponse!.content[0].text).toContain('custom (API) sales channels');
+  });
+
+  it('requires a selected shop', async () => {
+    const result = await notifyUnpublished(client({ getCurrentShop: () => null }), 'p1');
+    expect(result.success).toBe(false);
+    expect(result.errorResponse!.content[0].text).toMatch(/No shop is currently selected/);
   });
 });
