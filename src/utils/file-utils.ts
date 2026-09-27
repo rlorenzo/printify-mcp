@@ -159,7 +159,10 @@ export function validateFilePath(filePath: string, operation: 'read' | 'write'):
  * One rule on every platform, so every caller accepts the same inputs.
  */
 export function normalizeFileUri(source: string): string {
-  const filePath = source.startsWith('file://') ? source.slice('file://'.length) : source;
+  // A plain /C:/x is left alone: on POSIX it is a real absolute path, distinct
+  // from the relative C:/x.
+  if (!source.startsWith('file://')) return source;
+  const filePath = source.slice('file://'.length);
   return /^\/[a-zA-Z]:[\\/]/.test(filePath) ? filePath.substring(1) : filePath;
 }
 

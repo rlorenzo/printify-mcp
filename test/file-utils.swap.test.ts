@@ -118,6 +118,8 @@ describe('uploadImageToPrintify', () => {
     const text = JSON.stringify(r.errorResponse);
     expect(text).not.toContain(Buffer.from('SECRET').toString('hex'));
     expect(text).toContain('PathRejected');
+    expect(text).toContain('could not be opened safely');
+    expect(text).not.toContain('failed validation');
   });
 
   // With debugging on, the pre-upload check writes the file's bytes to debug/;

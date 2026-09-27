@@ -24,7 +24,7 @@ async function addFileDiagnostics(diagnosticInfo: any, source: string): Promise<
       diagnosticInfo.FileExists = false;
       diagnosticInfo.FileSize = 'N/A';
     } else {
-      diagnosticInfo.PathRejected = 'Path failed validation; file diagnostics were skipped';
+      diagnosticInfo.PathRejected = 'File could not be opened safely; file diagnostics were skipped';
     }
     return;
   }

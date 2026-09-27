@@ -7,7 +7,8 @@ import {
   ensureDirectoryExists,
   generateTempFilePath,
   getFileInfo,
-  cleanupFiles
+  cleanupFiles,
+  normalizeFileUri
 } from '../src/utils/file-utils.js';
 
 const original = process.env.ALLOWED_FILE_DIR;
@@ -92,6 +93,24 @@ describe('validateFilePath', () => {
 
   it('names the operation in the error', () => {
     expect(() => validateFilePath('/etc/passwd', 'write')).toThrow(/File write denied/);
+  });
+});
+
+describe('normalizeFileUri', () => {
+  it('strips the scheme and keeps a POSIX absolute path absolute', () => {
+    expect(normalizeFileUri('file:///Users/x/a.png')).toBe('/Users/x/a.png');
+  });
+
+  it('drops the leading slash of a Windows drive path in a file:// URI', () => {
+    expect(normalizeFileUri('file:///C:/x/a.png')).toBe('C:/x/a.png');
+    expect(normalizeFileUri('file:///d:\\x\\a.png')).toBe('d:\\x\\a.png');
+  });
+
+  // Outside a file:// URI, /C:/x is a real POSIX absolute path; stripping its
+  // slash would turn it into the relative path C:/x.
+  it('leaves a plain /C:/ path unchanged', () => {
+    expect(normalizeFileUri('/C:/x/a.png')).toBe('/C:/x/a.png');
+    expect(normalizeFileUri('C:/x/a.png')).toBe('C:/x/a.png');
   });
 });
 
