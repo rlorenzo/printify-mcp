@@ -366,6 +366,58 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
   );
 
   server.tool(
+    "create_order",
+    {
+      lineItems: z.array(z.object({
+        productId: z.string().optional().describe("Product ID (with variantId)"),
+        variantId: z.number().optional().describe("Variant ID"),
+        printProviderId: z.number().optional().describe("Print provider ID (with blueprintId, variantId and printAreas, for an item not saved as a product)"),
+        blueprintId: z.number().optional().describe("Blueprint ID"),
+        printAreas: z.record(z.string(), z.string()).optional().describe("Position to image URL, e.g. { front: \"https://...\" }"),
+        sku: z.string().optional().describe("Product SKU (instead of the ids)"),
+        quantity: z.number().int().positive().describe("Quantity")
+      })).min(1).describe("Items to order"),
+      address: z.object({
+        firstName: z.string().describe("Recipient first name"),
+        lastName: z.string().describe("Recipient last name"),
+        email: z.string().optional().describe("Recipient email"),
+        phone: z.string().optional().describe("Recipient phone"),
+        country: z.string().describe("Two-letter country code, e.g. US"),
+        region: z.string().optional().describe("State or region"),
+        address1: z.string().describe("Street address"),
+        address2: z.string().optional().describe("Apartment, suite, etc."),
+        city: z.string().describe("City"),
+        zip: z.string().describe("Postal code"),
+        company: z.string().optional().describe("Company")
+      }).describe("Shipping address"),
+      shippingMethod: z.enum(["standard", "priority", "express", "economy"]).optional()
+        .describe("Shipping method (default standard); see calculate_order_shipping for prices"),
+      externalId: z.string().optional().describe("Your own id for the order; generated when omitted"),
+      label: z.string().optional().describe("A label shown on the order in Printify"),
+      sendShippingNotification: z.boolean().optional().describe("Have Printify email the recipient when it ships (default false)")
+    },
+    { title: "Create order (on hold)", destructiveHint: false, idempotentHint: false },
+    withPrintify((client, args) => orders.createOrder(client, args))
+  );
+
+  server.tool(
+    "send_order_to_production",
+    {
+      orderId: z.string().describe("Order ID of an on-hold order"),
+      confirm: z.literal(true).describe("Must be true: sending to production charges the Printify account and cannot be undone")
+    },
+    { title: "Send order to production (charges the account)", destructiveHint: true, idempotentHint: false },
+    withPrintify((client, { orderId }) => orders.sendOrderToProduction(client, orderId))
+  );
+
+  server.tool(
+    "cancel_order",
+    { orderId: z.string().describe("Order ID of an order that is on hold or awaiting payment") },
+    { title: "Cancel order", destructiveHint: true, idempotentHint: true },
+    withPrintify((client, { orderId }) => orders.cancelOrder(client, orderId))
+  );
+
+  server.tool(
     "upload_image",
     {
       fileName: z.string().describe("File name"),
