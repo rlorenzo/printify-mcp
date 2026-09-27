@@ -110,7 +110,7 @@ describe('image tool schemas (31-line duplicated schema)', () => {
 
 describe('tool surface', () => {
   it('registers exactly the expected tools', () => {
-    expect(harness().names()).toHaveLength(19);
+    expect(harness().names()).toHaveLength(22);
   });
 });
 
@@ -119,5 +119,18 @@ describe('test harness', () => {
   // from reading the schema of a tool that isn't there.
   it('rejects an unknown tool name in callParsed', async () => {
     await expect(harness({}).callParsed('no_such_tool')).rejects.toThrow(/no such tool: no_such_tool/);
+  });
+});
+
+describe('upload library tools', () => {
+  it.each(['list_uploads', 'get_upload', 'archive_upload'])('%s needs the Printify client', async (name) => {
+    const res = await harness({ printifyClient: null }).call(name, {});
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('Printify API client is not initialized');
+  });
+
+  it('archive_upload is marked destructive', () => {
+    const tools = (harness() as any).server._registeredTools;
+    expect(tools.archive_upload.annotations.destructiveHint).toBe(true);
   });
 });

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `list_uploads`, `get_upload` and `archive_upload` find, inspect and archive
+  images in the account's upload library.
+
 ### Fixed
 - Defaults changed with `set_default` for `outputFormat`, `safetyTolerance`,
   `numInferenceSteps`, `guidanceScale` and `negativePrompt` are now applied;
