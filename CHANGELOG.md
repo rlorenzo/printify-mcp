@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `list_all_print_providers` and `get_print_provider` browse the catalog's
+  print providers directly, not only through a blueprint.
+- `get_shipping` reports a blueprint's shipping costs and handling time from a
+  provider, optionally for one country.
+
 ### Fixed
 - Defaults changed with `set_default` for `outputFormat`, `safetyTolerance`,
   `numInferenceSteps`, `guidanceScale` and `negativePrompt` are now applied;

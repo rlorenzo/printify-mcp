@@ -684,3 +684,34 @@ describe('initialize and getShops', () => {
     await expect(instance.getShops()).rejects.toThrow(/boom/);
   });
 });
+
+describe('catalog providers and shipping', () => {
+  it('lists every provider through the SDK', async () => {
+    const listProviders = vi.fn(async () => [{ id: 1 }]);
+    const { instance } = api({ catalog: { listProviders } });
+    expect(await instance.listAllPrintProviders()).toEqual([{ id: 1 }]);
+  });
+
+  it('fetches one provider and one blueprint\'s shipping by id', async () => {
+    const getProvider = vi.fn(async (id: string) => ({ id }));
+    const getVariantShipping = vi.fn(async () => ({ profiles: [] }));
+    const { instance } = api({ catalog: { getProvider, getVariantShipping } });
+    await instance.getPrintProvider(' 29 ');
+    await instance.getShipping('12', '29');
+    expect(getProvider).toHaveBeenCalledWith('29');
+    expect(getVariantShipping).toHaveBeenCalledWith('12', '29');
+  });
+
+  // The SDK interpolates ids into the URL unencoded; a crafted id must not
+  // reach another endpoint with the account's key.
+  it.each(['12/../../shops', '29?x=1', '', 'abc'])('rejects the non-numeric id %j before any request', async (bad) => {
+    const getProvider = vi.fn();
+    const getVariantShipping = vi.fn();
+    const { instance } = api({ catalog: { getProvider, getVariantShipping } });
+    await expect(instance.getPrintProvider(bad)).rejects.toThrow(/printProviderId must be a numeric id/);
+    await expect(instance.getShipping(bad, '29')).rejects.toThrow(/blueprintId must be a numeric id/);
+    await expect(instance.getShipping('12', bad)).rejects.toThrow(/printProviderId must be a numeric id/);
+    expect(getProvider).not.toHaveBeenCalled();
+    expect(getVariantShipping).not.toHaveBeenCalled();
+  });
+});

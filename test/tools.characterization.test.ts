@@ -110,7 +110,7 @@ describe('image tool schemas (31-line duplicated schema)', () => {
 
 describe('tool surface', () => {
   it('registers exactly the expected tools', () => {
-    expect(harness().names()).toHaveLength(19);
+    expect(harness().names()).toHaveLength(22);
   });
 });
 
@@ -119,5 +119,26 @@ describe('test harness', () => {
   // from reading the schema of a tool that isn't there.
   it('rejects an unknown tool name in callParsed', async () => {
     await expect(harness({}).callParsed('no_such_tool')).rejects.toThrow(/no such tool: no_such_tool/);
+  });
+});
+
+describe('catalog provider and shipping tools', () => {
+  it('get_shipping passes the ids and country through to the client', async () => {
+    const calls: any[] = [];
+    const h = harness({
+      printifyClient: fakePrintify({
+        getShipping: async (...args: any[]) => { calls.push(args); return { handling_time: { value: 1, unit: 'day' }, profiles: [] }; }
+      })
+    });
+    const res = await h.callParsed('get_shipping', { blueprintId: '12', printProviderId: '29', country: 'US' });
+    expect(res.isError).toBeFalsy();
+    expect(res.content[0].text).toContain('**Country**: "US"');
+    expect(calls).toEqual([['12', '29']]);
+  });
+
+  it.each(['list_all_print_providers', 'get_print_provider', 'get_shipping'])('%s needs the Printify client', async (name) => {
+    const res = await harness({ printifyClient: null }).call(name, {});
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('Printify API client is not initialized');
   });
 });

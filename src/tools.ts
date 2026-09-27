@@ -315,6 +315,40 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
   );
 
   server.tool(
+    "list_all_print_providers",
+    {
+      page: z.number().optional().default(1).describe("Page number"),
+      limit: z.number().optional().default(20).describe("Number of providers per page (max 100)")
+    },
+    READ_ONLY,
+    withPrintify((client, { page, limit }) => blueprints.listAllPrintProviders(client, { page, limit }))
+  );
+
+  server.tool(
+    "get_print_provider",
+    {
+      printProviderId: z.string().describe("Print provider ID"),
+      page: z.number().optional().default(1).describe("Page of the provider's blueprints"),
+      limit: z.number().optional().default(20).describe("Number of blueprints per page (max 100)")
+    },
+    READ_ONLY,
+    withPrintify((client, { printProviderId, page, limit }) =>
+      blueprints.getPrintProvider(client, printProviderId, { page, limit }))
+  );
+
+  server.tool(
+    "get_shipping",
+    {
+      blueprintId: z.string().describe("Blueprint ID"),
+      printProviderId: z.string().describe("Print provider ID"),
+      country: z.string().optional().describe("Two-letter country code (e.g. US, DE) to show only the rates for that country")
+    },
+    READ_ONLY,
+    withPrintify((client, { blueprintId, printProviderId, country }) =>
+      blueprints.getShipping(client, blueprintId, printProviderId, { country }))
+  );
+
+  server.tool(
     "upload_image",
     {
       fileName: z.string().describe("File name"),
