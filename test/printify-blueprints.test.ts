@@ -272,6 +272,28 @@ describe('getShipping', () => {
     expect(text).toContain('**Profiles**: []');
   });
 
+  // Profiles are split by variant: a country's rate for one group must not
+  // hide another group that only has a REST_OF_THE_WORLD rate.
+  it('picks the profile per variant group', async () => {
+    const split = {
+      handling_time: { value: 2, unit: 'day' },
+      profiles: [
+        { variant_ids: [1, 2], first_item: { cost: 450, currency: 'USD' }, additional_items: { cost: 0, currency: 'USD' }, countries: ['US'] },
+        { variant_ids: [1, 2], first_item: { cost: 1100, currency: 'USD' }, additional_items: { cost: 0, currency: 'USD' }, countries: ['REST_OF_THE_WORLD'] },
+        { variant_ids: [3], first_item: { cost: 900, currency: 'USD' }, additional_items: { cost: 0, currency: 'USD' }, countries: ['REST_OF_THE_WORLD'] },
+        { variant_ids: [4], first_item: { cost: 300, currency: 'USD' }, additional_items: { cost: 0, currency: 'USD' }, countries: ['DE'] }
+      ]
+    };
+    const client = fakeClient({ getShipping: async () => split });
+    const text = (await getShipping(client, '12', '29', { country: 'US' })).response!.content[0].text;
+    expect(text).toContain('"firstItem":"4.50 USD"');
+    expect(text).toContain('"firstItem":"9.00 USD"');
+    expect(text).not.toContain('11.00 USD');
+    expect(text).not.toContain('3.00 USD');
+    expect(text).toContain('Some variants have no US profile; they show REST_OF_THE_WORLD rates.');
+    expect(text).toContain('1 variant(s) do not ship to US: 4.');
+  });
+
   it('reports a failure without throwing', async () => {
     const client = fakeClient({ getShipping: async () => { throw new Error('no such provider'); } });
     const result = await getShipping(client, '12', '29');

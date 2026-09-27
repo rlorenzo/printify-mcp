@@ -302,6 +302,56 @@ function formatCost(price: any): string | undefined {
   return `${(price.cost / 100).toFixed(2)} ${price.currency ?? ''}`.trim();
 }
 
+/** Profiles with the same variants, keyed by their sorted variant ids. */
+function groupByVariants(profiles: any[]): any[][] {
+  const groups = new Map<string, any[]>();
+  for (const profile of profiles) {
+    const key = [...(profile.variant_ids ?? [])].sort((a: number, b: number) => a - b).join(',');
+    groups.set(key, [...(groups.get(key) ?? []), profile]);
+  }
+  return [...groups.values()];
+}
+
+/**
+ * The shipping profiles that apply to one country. Profiles are split by
+ * variant, so the choice is made per variant group: the group's profile naming
+ * the country, else its REST_OF_THE_WORLD profile. A group with neither does
+ * not ship there, and the note says which variants those are.
+ */
+function profilesForCountry(profiles: any[], country: string): { matched: any[]; note?: string } {
+  const names = (profile: any, code: string) => (profile.countries ?? []).includes(code);
+  const matched: any[] = [];
+  let fellBack = 0;
+  const unshipped: number[] = [];
+
+  for (const group of groupByVariants(profiles)) {
+    const named = group.find((profile) => names(profile, country));
+    const rest = group.find((profile) => names(profile, 'REST_OF_THE_WORLD'));
+    if (named) {
+      matched.push(named);
+    } else if (rest) {
+      matched.push(rest);
+      fellBack++;
+    } else {
+      unshipped.push(...(group[0].variant_ids ?? []));
+    }
+  }
+
+  if (matched.length === 0) {
+    return { matched, note: `This provider does not ship this blueprint to ${country}.` };
+  }
+  const notes: string[] = [];
+  if (fellBack > 0) {
+    notes.push(fellBack === matched.length
+      ? `No profile names ${country}; showing REST_OF_THE_WORLD rates.`
+      : `Some variants have no ${country} profile; they show REST_OF_THE_WORLD rates.`);
+  }
+  if (unshipped.length > 0) {
+    notes.push(`${unshipped.length} variant(s) do not ship to ${country}: ${unshipped.join(', ')}.`);
+  }
+  return { matched, note: notes.join('\n') || undefined };
+}
+
 export async function getShipping(
   printifyClient: PrintifyAPI,
   blueprintId: string,
@@ -327,20 +377,10 @@ export async function getShipping(
       const shipping: any = await printifyClient.getShipping(blueprintId, printProviderId);
       const profiles = asArray(shipping?.profiles);
 
-      // A country code narrows the profiles to the ones that ship there. A
-      // country no profile names is served by REST_OF_THE_WORLD, if offered.
       const country = options.country?.trim().toUpperCase();
-      let matched = profiles;
-      let countryNote: string | undefined;
-      if (country) {
-        matched = profiles.filter((profile: any) => (profile.countries ?? []).includes(country));
-        if (matched.length === 0) {
-          matched = profiles.filter((profile: any) => (profile.countries ?? []).includes('REST_OF_THE_WORLD'));
-          countryNote = matched.length > 0
-            ? `No profile names ${country}; showing REST_OF_THE_WORLD rates.`
-            : `This provider does not ship this blueprint to ${country}.`;
-        }
-      }
+      const { matched, note: countryNote } = country
+        ? profilesForCountry(profiles, country)
+        : { matched: profiles, note: undefined };
 
       const summaries = matched.map((profile: any) => ({
         countries: profile.countries,
