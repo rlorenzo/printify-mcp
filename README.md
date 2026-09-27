@@ -90,7 +90,7 @@ listed on the [GitHub Releases page](https://github.com/rlorenzo/printify-mcp/re
 | `get_blueprints` | List catalog blueprints (`page`, `limit`) |
 | `get_blueprint` | Get a blueprint (`blueprintId`) |
 | `get_print_providers` | Print providers for a blueprint (`blueprintId`) |
-| `get_variants` | Variants for a blueprint and provider (`blueprintId`, `printProviderId`) |
+| `get_variants` | Variants for a blueprint and provider (`blueprintId`, `printProviderId`; `showOutOfStock` to include out-of-stock ones) |
 | `upload_image` | Upload from a URL, a local file in `ALLOWED_FILE_DIR`, or a `data:<mime>;base64,...` URL (`fileName`, `url`) |
 | `generate_and_upload_image` | Generate with Flux and upload to Printify (`prompt`, `fileName`, generation options) |
 | `generate_image` | Generate with Flux and save locally (`prompt`, `outputPath`, generation options) |

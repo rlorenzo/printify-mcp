@@ -399,9 +399,19 @@ export class PrintifyAPI {
     }
   }
 
-  async getVariants(blueprintId: string, printProviderId: string) {
+  /**
+   * A blueprint's variants from one provider. The API hides out-of-stock
+   * variants unless asked; the SDK method takes no query options, so that case
+   * goes through the SDK's own authenticated request.
+   */
+  async getVariants(blueprintId: string, printProviderId: string, options: { showOutOfStock?: boolean } = {}) {
     try {
-      return await this.client.catalog.getBlueprintVariants(blueprintId, printProviderId);
+      if (!options.showOutOfStock) {
+        return await this.client.catalog.getBlueprintVariants(blueprintId, printProviderId);
+      }
+      const url = `/v1/catalog/blueprints/${encodeURIComponent(blueprintId)}` +
+        `/print_providers/${encodeURIComponent(printProviderId)}/variants.json`;
+      return await this.client.catalog.request(url, { method: 'GET', params: { 'show-out-of-stock': 1 } });
     } catch (error) {
       console.error(`Error fetching variants for blueprint ${blueprintId} and print provider ${printProviderId}:`, describeError(error));
       throw error;

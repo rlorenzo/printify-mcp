@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `get_variants` takes `showOutOfStock` to include variants the API hides
+  because they are out of stock.
+
 ### Fixed
 - Defaults changed with `set_default` for `outputFormat`, `safetyTolerance`,
   `numInferenceSteps`, `guidanceScale` and `negativePrompt` are now applied;
