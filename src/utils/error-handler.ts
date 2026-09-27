@@ -220,13 +220,15 @@ export const TIPS = {
  * and returned as `{ success: false, error, errorResponse }`. `context` is lazy
  * so it can read state that only exists once the step has failed.
  */
-export async function runService<T extends { response: any }>(
+export async function runService<T extends { response: any; success?: never }>(
   step: string,
   onError: { context?: () => Record<string, any>; tips?: string[] },
   fn: () => Promise<T>
 ): Promise<({ success: true } & T) | { success: false; error: any; errorResponse: ReturnType<typeof formatErrorResponse> }> {
   try {
-    return { success: true, ...(await fn()) };
+    // `success` last: the wrapper owns the envelope, and a stray `success`
+    // from the service must not be able to flip it.
+    return { ...(await fn()), success: true };
   } catch (error: any) {
     console.error(`Error in ${step}:`, describeError(error));
     return {
