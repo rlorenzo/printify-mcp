@@ -9,12 +9,15 @@ get_order({ orderId: "5a96f649b2439217" })              // items, costs, shippin
 
 `list_orders` leaves out street addresses and contact details; `get_order` returns them for one order.
 
-Quote shipping for items that are not ordered yet. Identify each item by `productId` + `variantId`, by `printProviderId` + `blueprintId` + `variantId`, or by `sku`:
+Quote shipping for items that are not ordered yet. Give the full recipient address: Printify may reject a partial one. Identify each item by `productId` + `variantId`, by `printProviderId` + `blueprintId` + `variantId`, or by `sku`:
 
 ```javascript
 calculate_order_shipping({
   lineItems: [{ productId: "5bfd0b66a342bcc9b5563216", variantId: 17887, quantity: 2 }],
-  address: { country: "US", zip: "10001" }
+  address: {
+    firstName: "Ada", lastName: "Lovelace", email: "ada@example.com", phone: "555-0100",
+    address1: "1 Main St", city: "New York", region: "NY", zip: "10001", country: "US"
+  }
 })
 // Rates per method, e.g. { Standard: "4.99", Express: "12.99" }
 ```

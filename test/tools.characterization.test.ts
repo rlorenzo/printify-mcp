@@ -133,7 +133,7 @@ describe('order tools', () => {
       address: { country: 'US', zip: '10001' }
     });
     expect(res.isError).toBeFalsy();
-    expect(sent.address_to).toEqual({ country: 'US', zip: '10001' });
+    expect(sent.address_to).toEqual({ country: 'US', region: '', zip: '10001' });
   });
 
   it('calculate_order_shipping rejects an empty item list at the schema', async () => {

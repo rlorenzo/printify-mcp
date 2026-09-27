@@ -187,7 +187,7 @@ export async function calculateOrderShipping(
       context: () => ({ Country: address?.country, Items: lineItems?.length ?? 0 }),
       tips: [
         'Identify each item by productId + variantId, by printProviderId + blueprintId + variantId, or by sku',
-        'Include at least the destination country and zip code',
+        'Printify may require the full recipient address (name, email, phone, street, city, region, zip, country)',
         TIPS.apiKey,
         TIPS.shop
       ]
@@ -209,7 +209,7 @@ export async function calculateOrderShipping(
           email: address.email,
           phone: address.phone,
           country: address.country.trim().toUpperCase(),
-          region: address.region,
+          region: address.region ?? '',
           address1: address.address1,
           address2: address.address2,
           city: address.city,
