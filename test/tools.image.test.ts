@@ -65,6 +65,18 @@ describe('generate_and_upload_image', () => {
     expect(sent).toMatchObject({ seed: 3, outputFormat: 'webp' });
   });
 
+  // Regression: zod-level defaults filled these in on every call, so a stored
+  // default set through set_default never reached generation.
+  it('uses stored defaults for options the call leaves out', async () => {
+    const replicate = fakeReplicate();
+    const h = harness({ printifyClient: fakePrintify(), replicateClient: replicate });
+    await h.call('set_default', { option: 'outputFormat', value: 'webp' });
+    await h.call('set_default', { option: 'numInferenceSteps', value: 40 });
+    await h.callParsed('generate_and_upload_image', { prompt: 'x', fileName: 'f' });
+    const sent = replicate.generateImage.mock.calls[0][1];
+    expect(sent).toMatchObject({ outputFormat: 'webp', numInferenceSteps: 40 });
+  });
+
   // An explicit dimension must outrank a stored default aspectRatio; the
   // default previously swallowed it, so the caller's width was silently lost.
   it('lets an explicit width override the default aspectRatio', async () => {

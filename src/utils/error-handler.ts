@@ -1,5 +1,5 @@
 /**
- * Error handling utilities for Printify MCP
+ * Error and response formatting for tool output.
  */
 
 /**
@@ -20,11 +20,7 @@ function formatFields(fields: Record<string, any>): string {
   }).join('');
 }
 
-/**
- * Cap on a serialized response body in a log line. A failing request should not
- * be able to flood the operator's log the way the catalog tools once flooded a
- * tool response.
- */
+/** Cap on a serialized response body in a log line. */
 const MAX_LOGGED_BODY = 2000;
 
 function safeJson(value: any): string {
@@ -40,23 +36,12 @@ function safeJson(value: any): string {
 }
 
 /**
- * Render an error as a single safe string for the operator log.
+ * Render an error as one safe log line: name, message, code, HTTP status,
+ * response body (capped), and the top stack frames.
  *
- * Never hand an error object straight to `console.error`. An axios error
- * carries `config` as an own enumerable property, so Node's inspector prints
- * `headers: { Authorization: 'Bearer <the real token>' }` in full -- and
- * stderr here is where the MCP client keeps its log file.
- *
- * printify-sdk-js@1.4 wraps axios errors in a plain Error before they reach
- * us, so no Printify token is reaching the log today. That is the SDK's
- * implementation detail rather than a contract, `axios` is a direct dependency
- * of this package and already used in replicate-output.ts, and the
- * `if (error.response)` branches in printify-api.ts are written for axios
- * errors. This keeps the guarantee independent of all three.
- *
- * What is kept is what actually helps: the error name and message, the error
- * code, the HTTP status, and the response body -- which is where Printify
- * returns its validation errors.
+ * Never pass an error object straight to `console.error`: axios errors carry
+ * `config.headers.Authorization`, which Node's inspector would print in full to
+ * stderr, the MCP client's log file.
  */
 export function describeError(error: any): string {
   if (error === null || error === undefined || typeof error !== 'object') {
@@ -91,84 +76,90 @@ export function describeError(error: any): string {
   return parts.join(' ');
 }
 
-/**
- * Format an error response for tool output
- */
+/** An error envelope for a tool result. */
 export function formatErrorResponse(
   error: any,
   step: string,
   context: Record<string, any> = {},
   tips: string[] = []
 ) {
-  // Get error details
   const errorType = error.constructor.name;
   const errorMessage = error.message || 'Unknown error';
   const errorStack = error.stack ? error.stack.split('\n').slice(0, 3).join('\n') : 'Not available';
-  
-  // Format the error message
+
   let text = `❌ **Error in ${step}**\n\n`;
-  
-  // Add context information
   text += formatFields(context);
-  
   text += `- **Error**: ${errorMessage}\n\n`;
-  
-  // Add detailed diagnostic information
   text += `=== DETAILED DIAGNOSTIC INFORMATION ===\n\n`;
   text += `- **Error Type**: ${errorType}\n`;
   text += `- **Error Stack**: ${errorStack}\n`;
-  
-  // Add additional context details
-  Object.entries(context).forEach(([key, value]) => {
-    if (key !== 'Prompt' && key !== 'Model' && key !== 'Error') {
-      if (typeof value === 'object' && value !== null) {
-        text += `- **${key}**: ${JSON.stringify(value, null, 2)}\n`;
-      } else if (value !== undefined && value !== null) {
-        text += `- **${key}**: ${value}\n`;
-      }
-    }
-  });
-  
-  // Add API response status if available. The response body is deliberately
-  // omitted: it can carry account details, and it reaches the model verbatim.
+
+  // The response body is deliberately omitted: it can carry account details,
+  // and it reaches the model verbatim.
   if (error.response) {
     text += `- **API Response Status**: ${error.response.status}\n\n`;
   }
-  
-  // Add tips if provided
+
   if (tips.length > 0) {
     text += `\n🔄 Please try again with a different prompt or parameters.\n\n`;
     text += '💡 **Tips**:\n';
-    tips.forEach(tip => {
-      text += `• ${tip}\n`;
-    });
+    text += tips.map(tip => `• ${tip}\n`).join('');
   }
-  
+
   return {
-    content: [{ type: "text", text }],
+    content: [{ type: "text" as const, text }],
     isError: true
   };
 }
 
-/**
- * Format a success response for tool output
- */
+/** A success envelope for a tool result. */
 export function formatSuccessResponse(
   title: string,
   data: Record<string, any> = {},
   additionalText: string = ''
 ) {
-  let text = `✅ **${title}**\n\n`;
-  
-  // Add data information
-  text += formatFields(data);
-  
-  // Add additional text if provided
+  let text = `✅ **${title}**\n\n` + formatFields(data);
   if (additionalText) {
     text += `\n${additionalText}`;
   }
-  
   return {
-    content: [{ type: "text", text }]
+    content: [{ type: "text" as const, text }]
   };
+}
+
+/** A plain-text tool result. */
+export function textResponse(text: string) {
+  return { content: [{ type: "text" as const, text }] };
+}
+
+/** Troubleshooting tips shared by most Printify services. */
+export const TIPS = {
+  apiKey: 'Check that your Printify API key is valid',
+  connected: 'Ensure your Printify account is properly connected',
+  shop: 'Make sure you have selected a shop'
+} as const;
+
+/**
+ * Run a service step and wrap the outcome.
+ *
+ * On success, the fields `fn` returns (including its `response` envelope) are
+ * spread into `{ success: true, ... }`. On a throw, the error is logged safely
+ * and returned as `{ success: false, error, errorResponse }`. `context` is lazy
+ * so it can read state that only exists once the step has failed.
+ */
+export async function runService<T extends { response: any }>(
+  step: string,
+  onError: { context?: () => Record<string, any>; tips?: string[] },
+  fn: () => Promise<T>
+): Promise<({ success: true } & T) | { success: false; error: any; errorResponse: ReturnType<typeof formatErrorResponse> }> {
+  try {
+    return { success: true, ...(await fn()) };
+  } catch (error: any) {
+    console.error(`Error in ${step}:`, describeError(error));
+    return {
+      success: false,
+      error,
+      errorResponse: formatErrorResponse(error, step, onError.context?.() ?? {}, onError.tips ?? [])
+    };
+  }
 }

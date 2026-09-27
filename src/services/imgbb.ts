@@ -11,6 +11,13 @@ export type ImgbbOutcome =
   | { method: 'direct' }
   | { method: 'failed'; message: string };
 
+/** The error for an Ultra-model upload with no ImgBB key configured. */
+export const IMGBB_REQUIRED_MESSAGE =
+  'The Flux 1.1 Pro Ultra model generates high-resolution images that are too large ' +
+  'for direct base64 upload.\n\nYou MUST set the IMGBB_API_KEY environment variable ' +
+  'when using this model.\n\nGet a free API key from https://api.imgbb.com/ and add it to your .env file:\n' +
+  'IMGBB_API_KEY=your_api_key_here';
+
 /** Whether a model id needs the ImgBB path rather than direct base64 upload. */
 export function requiresImgbb(modelId: string): boolean {
   return modelId.includes('flux-1.1-pro-ultra');
@@ -38,13 +45,7 @@ export async function stageOnImgbb(
 
   if (!hasImgbbKey(apiKey)) {
     if (mustUseImgbb) {
-      return {
-        method: 'failed',
-        message:
-          'The Flux 1.1 Pro Ultra model generates high-resolution images that are too large ' +
-          'for direct base64 upload.\n\nYou MUST set the IMGBB_API_KEY environment variable ' +
-          'when using this model.\n\nGet a free API key from https://api.imgbb.com/'
-      };
+      return { method: 'failed', message: IMGBB_REQUIRED_MESSAGE };
     }
     console.error('No ImgBB API key found. Using direct base64 upload.');
     return { method: 'direct' };

@@ -1,13 +1,6 @@
 /**
- * Merge configured defaults with the arguments of an image-generation tool call.
- *
- * Both generation tools build their Replicate options the same way: start from
- * the stored defaults, then let any explicitly-provided argument win. An
- * argument left undefined must not clobber its default, which is why this is a
- * key-by-key merge rather than a plain object spread.
- *
- * `seed` is deliberately absent from the defaults: it only takes effect when a
- * caller asks for a reproducible run.
+ * Merge stored defaults with a generation tool's arguments. Explicit arguments
+ * win; undefined ones do not clobber a default. `seed` has no default.
  */
 export function mergeGenerationOptions(
   defaults: Record<string, any>,
@@ -33,11 +26,8 @@ export function mergeGenerationOptions(
     if (value !== undefined) merged[key] = value;
   }
 
-  // Aspect ratio and explicit dimensions are mutually exclusive, and an
-  // explicit argument must outrank a stored default. Without this, a saved
-  // default aspectRatio silently swallowed a caller's width/height, because
-  // downstream mapping prefers a ratio whenever one is present. This mirrors
-  // the exclusivity DefaultsManager.setDefault already enforces.
+  // Aspect ratio and dimensions are exclusive, and an explicit argument must
+  // outrank a stored default (downstream mapping prefers a ratio when present).
   const askedForRatio = args.aspectRatio !== undefined;
   const askedForSize = args.width !== undefined || args.height !== undefined;
 

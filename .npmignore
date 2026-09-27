@@ -35,5 +35,3 @@ temp/
 *.tmp
 *.bak
 
-# Documentation source files (keep the compiled docs)
-docs/
