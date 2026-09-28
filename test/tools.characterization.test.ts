@@ -110,7 +110,7 @@ describe('image tool schemas (31-line duplicated schema)', () => {
 
 describe('tool surface', () => {
   it('registers exactly the expected tools', () => {
-    expect(harness().names()).toHaveLength(22);
+    expect(harness().names()).toHaveLength(25);
   });
 });
 
@@ -119,6 +119,32 @@ describe('test harness', () => {
   // from reading the schema of a tool that isn't there.
   it('rejects an unknown tool name in callParsed', async () => {
     await expect(harness({}).callParsed('no_such_tool')).rejects.toThrow(/no such tool: no_such_tool/);
+  });
+});
+
+describe('order tools', () => {
+  it('calculate_order_shipping validates and forwards the items and address', async () => {
+    let sent: any;
+    const h = harness({
+      printifyClient: fakePrintify({ calculateOrderShipping: async (data: any) => { sent = data; return { standard: 500 }; } })
+    });
+    const res = await h.callParsed('calculate_order_shipping', {
+      lineItems: [{ productId: 'p1', variantId: 1, quantity: 1 }],
+      address: { country: 'US', zip: '10001' }
+    });
+    expect(res.isError).toBeFalsy();
+    expect(sent.address_to).toEqual({ country: 'US', region: '', zip: '10001' });
+  });
+
+  it('calculate_order_shipping rejects an empty item list at the schema', async () => {
+    const h = harness({ printifyClient: fakePrintify() });
+    await expect(h.callParsed('calculate_order_shipping', { lineItems: [], address: { country: 'US' } })).rejects.toThrow();
+  });
+
+  it.each(['list_orders', 'get_order', 'calculate_order_shipping'])('%s needs the Printify client', async (name) => {
+    const res = await harness({ printifyClient: null }).call(name, {});
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('Printify API client is not initialized');
   });
 });
 
@@ -140,6 +166,31 @@ describe('catalog provider and shipping tools', () => {
     const res = await harness({ printifyClient: null }).call(name, {});
     expect(res.isError).toBe(true);
     expect(res.content[0].text).toContain('Printify API client is not initialized');
+  });
+});
+
+describe('how_to_use orders', () => {
+  it('serves the orders guide', async () => {
+    const res = await harness().call('how_to_use', { topic: 'orders' });
+    expect(res.isError).toBeFalsy();
+    expect(res.content[0].text).toContain('calculate_order_shipping');
+  });
+});
+
+describe('list_orders paging', () => {
+  // Negative or fractional values would otherwise reach the Printify API.
+  it.each([{ page: 0 }, { page: -1 }, { page: 1.5 }, { limit: 0 }, { limit: -5 }, { limit: 2.5 }])(
+    'rejects %j at the schema', async (args) => {
+      const h = harness({ printifyClient: fakePrintify() });
+      await expect(h.callParsed('list_orders', args)).rejects.toThrow();
+    });
+
+  it('accepts positive integers', async () => {
+    let seen: any;
+    const h = harness({ printifyClient: fakePrintify({ listOrders: async (opts: any) => { seen = opts; return { data: [] }; } }) });
+    const res = await h.callParsed('list_orders', { page: 2, limit: 5 });
+    expect(res.isError).toBeFalsy();
+    expect(seen).toEqual({ page: 2, limit: 5 });
   });
 });
 

@@ -16,6 +16,7 @@ import { ensureDirectoryExists, validateFilePath } from "./utils/file-utils.js";
 import * as shops from "./services/printify-shops.js";
 import * as products from "./services/printify-products.js";
 import * as blueprints from "./services/printify-blueprints.js";
+import * as orders from "./services/printify-orders.js";
 import { uploadImageToPrintify, determineImageSourceType } from "./services/printify-uploader.js";
 import axios from "axios";
 import FormData from "form-data";
@@ -131,7 +132,8 @@ const DOC_TOPICS = [
   "variants",
   "images",
   "publishing",
-  "image_generation"
+  "image_generation",
+  "orders"
 ] as const;
 
 /** Generation options shared by generate_and_upload_image and generate_image. */
@@ -348,6 +350,55 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
     READ_ONLY,
     withPrintify((client, { blueprintId, printProviderId, country }) =>
       blueprints.getShipping(client, blueprintId, printProviderId, { country }))
+  );
+
+  server.tool(
+    "list_orders",
+    {
+      page: z.number().int().positive().optional().default(1).describe("Page number"),
+      limit: z.number().int().positive().optional().default(10).describe("Number of orders per page"),
+      status: z.string().optional()
+        .describe("Only orders with this status, e.g. pending, on-hold, in-production, fulfilled, canceled"),
+      sku: z.string().optional().describe("Only orders containing this SKU")
+    },
+    READ_ONLY,
+    withPrintify((client, { page, limit, status, sku }) => orders.listOrders(client, { page, limit, status, sku }))
+  );
+
+  server.tool(
+    "get_order",
+    { orderId: z.string().describe("Order ID") },
+    READ_ONLY,
+    withPrintify((client, { orderId }) => orders.getOrder(client, orderId))
+  );
+
+  server.tool(
+    "calculate_order_shipping",
+    {
+      lineItems: z.array(z.object({
+        productId: z.string().optional().describe("Product ID (with variantId)"),
+        variantId: z.number().optional().describe("Variant ID"),
+        printProviderId: z.number().optional().describe("Print provider ID (with blueprintId and variantId, for a product not in the shop)"),
+        blueprintId: z.number().optional().describe("Blueprint ID"),
+        sku: z.string().optional().describe("Product SKU (instead of the ids)"),
+        quantity: z.number().int().positive().describe("Quantity")
+      })).min(1).describe("Items to quote, each by productId + variantId, by printProviderId + blueprintId + variantId, or by sku"),
+      address: z.object({
+        country: z.string().describe("Two-letter country code, e.g. US"),
+        zip: z.string().optional().describe("Postal code"),
+        region: z.string().optional().describe("State or region"),
+        city: z.string().optional().describe("City"),
+        address1: z.string().optional().describe("Street address"),
+        address2: z.string().optional().describe("Apartment, suite, etc."),
+        firstName: z.string().optional().describe("Recipient first name"),
+        lastName: z.string().optional().describe("Recipient last name"),
+        email: z.string().optional().describe("Recipient email"),
+        phone: z.string().optional().describe("Recipient phone")
+      }).describe("Destination address. Printify may reject a partial address, so give the full recipient address when you have it")
+    },
+    // Quotes only: the endpoint is a POST but creates nothing.
+    READ_ONLY,
+    withPrintify((client, { lineItems, address }) => orders.calculateOrderShipping(client, lineItems, address))
   );
 
   server.tool(
