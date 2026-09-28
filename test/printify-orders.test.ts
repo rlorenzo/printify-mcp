@@ -185,6 +185,18 @@ describe('createOrder', () => {
     expect(result.success).toBe(false);
     expect(result.errorResponse!.content[0].text).toMatch(/400 Bad Request/);
   });
+
+  // A timed-out request may still have created the order, so the failure must
+  // name the external id that was sent and warn against a blind retry.
+  it('reports the sent external id and warns before retrying when creation fails', async () => {
+    let sent: any;
+    const client = fakeClient({ createOrder: async (data: any) => { sent = data; throw new Error('timeout of 60000ms exceeded'); } });
+    const result = await createOrder(client, { lineItems: [{ sku: 'S', quantity: 1 }], address: ADDRESS });
+    expect(result.success).toBe(false);
+    const text = result.errorResponse!.content[0].text;
+    expect(text).toContain(`**External Id**: "${sent.external_id}"`);
+    expect(text).toContain('check recent on-hold orders with list_orders before retrying');
+  });
 });
 
 describe('sendOrderToProduction and cancelOrder', () => {

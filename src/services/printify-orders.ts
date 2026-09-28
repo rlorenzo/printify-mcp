@@ -286,11 +286,22 @@ export async function createOrder(
     sendShippingNotification?: boolean;
   }
 ) {
+  // The API requires external_id (the order's id in the caller's own system);
+  // callers without one get a generated id. It is chosen before the request
+  // so a failure can still report it: a request that timed out may have
+  // created the order anyway.
+  const externalId = input.externalId ?? randomUUID();
+
   return runService(
     'Create Order',
     {
-      context: () => ({ Country: input.address?.country, Items: input.lineItems?.length ?? 0 }),
+      context: () => ({
+        Country: input.address?.country,
+        Items: input.lineItems?.length ?? 0,
+        'External Id': externalId
+      }),
       tips: [
+        'The order may have been created even though this call failed; check recent on-hold orders with list_orders before retrying',
         'Identify each item by productId + variantId, by printProviderId + blueprintId + variantId with printAreas, or by sku',
         'The address needs a name, street, city, zip and country',
         TIPS.apiKey,
@@ -300,10 +311,6 @@ export async function createOrder(
     async () => {
       requireShop(printifyClient);
       const method = SHIPPING_METHOD_CODES[input.shippingMethod ?? 'standard'];
-      // The API requires external_id (the order's id in the caller's own
-      // system); callers without one get a generated id.
-      const externalId = input.externalId ?? randomUUID();
-
       const created: any = await printifyClient.createOrder({
         external_id: externalId,
         ...(input.label ? { label: input.label } : {}),
