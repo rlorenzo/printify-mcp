@@ -444,34 +444,12 @@ export class PrintifyAPI {
     }
   }
 
-  /** One page of the current shop's orders, optionally filtered by status or SKU. */
-  async listOrders(options: { page?: number; limit?: number; status?: string; sku?: string } = {}) {
-    const shopId = this.requireShopId();
-    try {
-      return await this.client.orders.list(options);
-    } catch (error) {
-      console.error(`Error fetching orders for shop ${shopId}:`, describeError(error));
-      throw error;
-    }
-  }
-
   /** Every print provider in the catalog, not just those offering one blueprint. */
   async listAllPrintProviders() {
     try {
       return await this.client.catalog.listProviders();
     } catch (error) {
       console.error('Error fetching print providers:', describeError(error));
-      throw error;
-    }
-  }
-
-  async getOrder(orderId: string) {
-    this.requireShopId();
-    const id = pathId(orderId, 'orderId');
-    try {
-      return await this.client.orders.getOne(id);
-    } catch (error) {
-      console.error(`Error fetching order ${id}:`, describeError(error));
       throw error;
     }
   }
@@ -487,17 +465,6 @@ export class PrintifyAPI {
     }
   }
 
-  /** Shipping cost per method for a prospective order; nothing is created. */
-  async calculateOrderShipping(data: any) {
-    this.requireShopId();
-    try {
-      return await this.client.orders.calculateShipping(data);
-    } catch (error) {
-      console.error('Error calculating order shipping:', describeError(error));
-      throw error;
-    }
-  }
-
   /** Shipping costs and handling time for a blueprint from one provider. */
   async getShipping(blueprintId: string, printProviderId: string) {
     const blueprint = catalogId(blueprintId, 'blueprintId');
@@ -506,6 +473,39 @@ export class PrintifyAPI {
       return await this.client.catalog.getVariantShipping(blueprint, provider);
     } catch (error) {
       console.error(`Error fetching shipping for blueprint ${blueprint} and print provider ${provider}:`, describeError(error));
+      throw error;
+    }
+  }
+
+  /** One page of the current shop's orders, optionally filtered by status or SKU. */
+  async listOrders(options: { page?: number; limit?: number; status?: string; sku?: string } = {}) {
+    const shopId = this.requireShopId();
+    try {
+      return await this.client.orders.list(options);
+    } catch (error) {
+      console.error(`Error fetching orders for shop ${shopId}:`, describeError(error));
+      throw error;
+    }
+  }
+
+  async getOrder(orderId: string) {
+    this.requireShopId();
+    const id = pathId(orderId, 'orderId');
+    try {
+      return await this.client.orders.getOne(id);
+    } catch (error) {
+      console.error(`Error fetching order ${id}:`, describeError(error));
+      throw error;
+    }
+  }
+
+  /** Shipping cost per method for a prospective order; nothing is created. */
+  async calculateOrderShipping(data: any) {
+    this.requireShopId();
+    try {
+      return await this.client.orders.calculateShipping(data);
+    } catch (error) {
+      console.error('Error calculating order shipping:', describeError(error));
       throw error;
     }
   }
