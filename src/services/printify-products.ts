@@ -266,3 +266,73 @@ export async function publishProduct(
     }
   );
 }
+
+/**
+ * Publish status for custom (API) sales channels. After publish_product, such
+ * a channel must report the outcome, or the product stays locked as
+ * "publishing" in Printify. Shopify, Etsy and similar channels do this
+ * themselves.
+ */
+const PUBLISH_STATUS_TIPS = [
+  'Check that the product ID is valid',
+  'These calls are for custom (API) sales channels; built-in channels report publishing themselves',
+  TIPS.shop
+];
+
+export async function setPublishSucceeded(
+  printifyClient: PrintifyAPI,
+  productId: string,
+  external: { id: string; handle: string }
+) {
+  return runService(
+    'Set Publish Succeeded',
+    { context: () => ({ ProductId: productId, ExternalId: external?.id, Handle: external?.handle }), tips: PUBLISH_STATUS_TIPS },
+    async () => {
+      requireShop(printifyClient);
+      await printifyClient.setPublishSucceeded(productId, external);
+      return {
+        response: formatSuccessResponse(
+          'Publish Marked Succeeded',
+          { ProductId: productId, 'External Id': external.id, Handle: external.handle },
+          'The product is unlocked in Printify and linked to its listing.'
+        )
+      };
+    }
+  );
+}
+
+export async function setPublishFailed(printifyClient: PrintifyAPI, productId: string, reason: string) {
+  return runService(
+    'Set Publish Failed',
+    { context: () => ({ ProductId: productId, Reason: reason }), tips: PUBLISH_STATUS_TIPS },
+    async () => {
+      requireShop(printifyClient);
+      await printifyClient.setPublishFailed(productId, reason);
+      return {
+        response: formatSuccessResponse(
+          'Publish Marked Failed',
+          { ProductId: productId, Reason: reason },
+          'The product is unlocked in Printify and can be edited or published again.'
+        )
+      };
+    }
+  );
+}
+
+export async function notifyUnpublished(printifyClient: PrintifyAPI, productId: string) {
+  return runService(
+    'Notify Unpublished',
+    { context: () => ({ ProductId: productId }), tips: PUBLISH_STATUS_TIPS },
+    async () => {
+      requireShop(printifyClient);
+      await printifyClient.notifyUnpublished(productId);
+      return {
+        response: formatSuccessResponse(
+          'Product Marked Unpublished',
+          { ProductId: productId },
+          'Printify now treats the product as removed from the sales channel.'
+        )
+      };
+    }
+  );
+}

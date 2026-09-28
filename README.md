@@ -87,6 +87,8 @@ listed on the [GitHub Releases page](https://github.com/rlorenzo/printify-mcp/re
 | `update_product` | Update a product (`productId` plus any of `title`, `description`, `variants`, `printAreas`) |
 | `delete_product` | Delete a product (`productId`) |
 | `publish_product` | Publish to the connected sales channel (`productId`, `publishDetails`) |
+| `set_publish_succeeded` / `set_publish_failed` | Report a publish result for a custom (API) sales channel, unlocking the product (`productId`, plus `externalId` and `handle`, or `reason`) |
+| `notify_unpublished` | Report that a custom channel took the product down (`productId`) |
 | `get_blueprints` | List catalog blueprints (`page`, `limit`) |
 | `get_blueprint` | Get a blueprint (`blueprintId`) |
 | `get_print_providers` | Print providers for a blueprint (`blueprintId`) |

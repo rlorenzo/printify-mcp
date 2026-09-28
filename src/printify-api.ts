@@ -576,6 +576,45 @@ export class PrintifyAPI {
     }
   }
 
+  /**
+   * Tell Printify a publish finished on a custom sales channel, recording the
+   * product's id and URL there. Clears the product's "publishing" lock.
+   */
+  async setPublishSucceeded(productId: string, external: { id: string; handle: string }) {
+    this.requireShopId();
+    const id = pathId(productId, 'productId');
+    try {
+      return await this.client.products.setPublishSucceeded(id, { external });
+    } catch (error) {
+      console.error(`Error marking product ${id} as published:`, describeError(error));
+      throw error;
+    }
+  }
+
+  /** Tell Printify a publish failed on a custom sales channel. Clears the lock. */
+  async setPublishFailed(productId: string, reason: string) {
+    this.requireShopId();
+    const id = pathId(productId, 'productId');
+    try {
+      return await this.client.products.setPublishFailed(id, { reason });
+    } catch (error) {
+      console.error(`Error marking product ${id} as failed to publish:`, describeError(error));
+      throw error;
+    }
+  }
+
+  /** Tell Printify a product was taken down from the sales channel. */
+  async notifyUnpublished(productId: string) {
+    this.requireShopId();
+    const id = pathId(productId, 'productId');
+    try {
+      return await this.client.products.notifyUnpublished(id);
+    } catch (error) {
+      console.error(`Error marking product ${id} as unpublished:`, describeError(error));
+      throw error;
+    }
+  }
+
   /** Attach the API's status and validation errors to a thrown error for callers. */
   private enhanceError(error: any, requestData?: any): any {
     if (error.response) {

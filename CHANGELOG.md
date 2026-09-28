@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `set_publish_succeeded`, `set_publish_failed` and `notify_unpublished`
+  report publishing results for custom (API) sales channels, so products do
+  not stay locked as "publishing".
 - `list_uploads`, `get_upload` and `archive_upload` find, inspect and archive
   images in the account's upload library.
 - `list_orders` and `get_order` read the current shop's orders. Lists leave

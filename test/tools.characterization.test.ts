@@ -110,7 +110,7 @@ describe('image tool schemas (31-line duplicated schema)', () => {
 
 describe('tool surface', () => {
   it('registers exactly the expected tools', () => {
-    expect(harness().names()).toHaveLength(31);
+    expect(harness().names()).toHaveLength(34);
   });
 });
 
@@ -263,5 +263,23 @@ describe('upload library tools', () => {
   it('archive_upload is marked destructive', () => {
     const tools = (harness() as any).server._registeredTools;
     expect(tools.archive_upload.annotations.destructiveHint).toBe(true);
+  });
+});
+
+describe('publish status tools', () => {
+  it('set_publish_succeeded maps externalId and handle to the external record', async () => {
+    const calls: any[] = [];
+    const h = harness({
+      printifyClient: fakePrintify({ setPublishSucceeded: async (...args: any[]) => { calls.push(args); } })
+    });
+    const res = await h.callParsed('set_publish_succeeded', { productId: 'p1', externalId: 'e1', handle: 'https://shop.test/e1' });
+    expect(res.isError).toBeFalsy();
+    expect(calls).toEqual([['p1', { id: 'e1', handle: 'https://shop.test/e1' }]]);
+  });
+
+  it.each(['set_publish_succeeded', 'set_publish_failed', 'notify_unpublished'])('%s needs the Printify client', async (name) => {
+    const res = await harness({ printifyClient: null }).call(name, {});
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('Printify API client is not initialized');
   });
 });
