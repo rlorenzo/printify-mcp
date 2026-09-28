@@ -14,7 +14,7 @@ const toolNames = (server: any) => Object.keys(server._registeredTools ?? {});
 describe('createPrintifyMcpServer', () => {
   it('registers the full tool surface', () => {
     const { server } = createPrintifyMcpServer({ printifyApiKey: 'k' });
-    expect(toolNames(server)).toHaveLength(22);
+    expect(toolNames(server)).toHaveLength(31);
     expect(Object.keys((server as any)._registeredPrompts ?? {})).toHaveLength(1);
   });
 
