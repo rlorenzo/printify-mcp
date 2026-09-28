@@ -32,7 +32,8 @@ export async function listUploads(
       if (!Array.isArray(uploads?.data)) {
         throw new Error('Printify returned an upload list without a data array');
       }
-      const data = uploads.data.filter((upload: any) => upload && typeof upload === 'object');
+      // An entry without an id can't be used or looked up, so it isn't listed.
+      const data = uploads.data.filter((upload: any) => upload && typeof upload === 'object' && upload.id);
 
       return {
         uploads,

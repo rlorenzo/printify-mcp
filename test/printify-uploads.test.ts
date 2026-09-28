@@ -71,6 +71,16 @@ describe('malformed upload responses', () => {
     expect(result.errorResponse!.content[0].text).toContain('without a data array');
   });
 
+  it('list_uploads leaves out entries without an id', async () => {
+    const result = await listUploads(fakeClient({
+      listUploads: async () => ({ data: [{ file_name: 'orphan.png' }, null, 'x', UPLOAD] })
+    }));
+    const text = result.response!.content[0].text;
+    expect(text).toContain('**Count**: "1"');
+    expect(text).not.toContain('orphan.png');
+    expect(text).toContain(UPLOAD.id);
+  });
+
   it('list_uploads still reports a genuinely empty library', async () => {
     const result = await listUploads(fakeClient({ listUploads: async () => ({ data: [] }) }));
     expect(result.success).toBe(true);
