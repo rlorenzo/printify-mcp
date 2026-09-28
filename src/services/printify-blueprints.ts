@@ -143,6 +143,7 @@ export async function getVariants(
   options: {
     page?: number;
     limit?: number;
+    showOutOfStock?: boolean;
   } = {}
 ) {
   return runService(
@@ -152,7 +153,8 @@ export async function getVariants(
         BlueprintId: blueprintId,
         PrintProviderId: printProviderId,
         Page: options.page,
-        Limit: options.limit
+        Limit: options.limit,
+        ...(options.showOutOfStock ? { ShowOutOfStock: true } : {})
       }),
       tips: [
         'Check that the blueprint ID is valid',
@@ -162,7 +164,9 @@ export async function getVariants(
       ]
     },
     async () => {
-      const variants = await printifyClient.getVariants(blueprintId, printProviderId);
+      const variants = await printifyClient.getVariants(blueprintId, printProviderId, {
+        showOutOfStock: options.showOutOfStock
+      });
       const all = asArray((variants as any)?.variants ?? variants);
 
       // Every variant repeats the same placeholders, so report them once.
@@ -186,6 +190,8 @@ export async function getVariants(
           {
             BlueprintId: blueprintId,
             PrintProviderId: printProviderId,
+            // Say which list this is: by default the API leaves out-of-stock variants out.
+            'Out Of Stock': options.showOutOfStock ? 'included' : 'hidden (pass showOutOfStock: true to include)',
             Total: paged.total,
             Page: paged.page,
             PageCount: paged.pageCount,

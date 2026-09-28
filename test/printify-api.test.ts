@@ -684,3 +684,39 @@ describe('initialize and getShops', () => {
     await expect(instance.getShops()).rejects.toThrow(/boom/);
   });
 });
+
+describe('getVariants', () => {
+  // The SDK's getBlueprintVariants takes no query options, and the API leaves
+  // out-of-stock variants out unless show-out-of-stock is passed.
+  it('uses the SDK method when out-of-stock variants are not asked for', async () => {
+    const getBlueprintVariants = vi.fn(async () => ({ variants: [] }));
+    const request = vi.fn();
+    const { instance } = api({ catalog: { getBlueprintVariants, request } });
+    await instance.getVariants('12', '29');
+    expect(getBlueprintVariants).toHaveBeenCalledWith('12', '29');
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('passes show-out-of-stock through the SDK request when asked', async () => {
+    const getBlueprintVariants = vi.fn();
+    const request = vi.fn(async () => ({ variants: [{ id: 1 }] }));
+    const { instance } = api({ catalog: { getBlueprintVariants, request } });
+    const result = await instance.getVariants('12', '29', { showOutOfStock: true });
+    expect(result).toEqual({ variants: [{ id: 1 }] });
+    expect(getBlueprintVariants).not.toHaveBeenCalled();
+    expect(request).toHaveBeenCalledWith(
+      '/v1/catalog/blueprints/12/print_providers/29/variants.json',
+      { method: 'GET', params: { 'show-out-of-stock': 1 } }
+    );
+  });
+
+  // The ids come from the model; they must not be able to reshape the path.
+  it('encodes the ids in the request path', async () => {
+    const request = vi.fn(async () => ({ variants: [] }));
+    const { instance } = api({ catalog: { request } });
+    await instance.getVariants('12/../../shops', '29?x=1', { showOutOfStock: true });
+    expect(request.mock.calls[0][0]).toBe(
+      '/v1/catalog/blueprints/12%2F..%2F..%2Fshops/print_providers/29%3Fx%3D1/variants.json'
+    );
+  });
+});

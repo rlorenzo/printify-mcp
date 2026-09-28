@@ -121,3 +121,17 @@ describe('test harness', () => {
     await expect(harness({}).callParsed('no_such_tool')).rejects.toThrow(/no such tool: no_such_tool/);
   });
 });
+
+describe('get_variants showOutOfStock', () => {
+  it('passes the flag from the tool arguments to the client', async () => {
+    const calls: any[] = [];
+    const h = harness({
+      printifyClient: fakePrintify({
+        getVariants: async (...args: any[]) => { calls.push(args); return { variants: [] }; }
+      })
+    });
+    const res = await h.callParsed('get_variants', { blueprintId: '12', printProviderId: '29', showOutOfStock: true });
+    expect(res.isError).toBeFalsy();
+    expect(calls).toEqual([['12', '29', { showOutOfStock: true }]]);
+  });
+});
