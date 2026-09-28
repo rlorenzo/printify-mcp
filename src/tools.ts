@@ -319,8 +319,8 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
   server.tool(
     "list_orders",
     {
-      page: z.number().optional().default(1).describe("Page number"),
-      limit: z.number().optional().default(10).describe("Number of orders per page"),
+      page: z.number().int().positive().optional().default(1).describe("Page number"),
+      limit: z.number().int().positive().optional().default(10).describe("Number of orders per page"),
       status: z.string().optional()
         .describe("Only orders with this status, e.g. pending, on-hold, in-production, fulfilled, canceled"),
       sku: z.string().optional().describe("Only orders containing this SKU")

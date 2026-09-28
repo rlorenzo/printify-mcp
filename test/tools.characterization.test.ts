@@ -155,3 +155,20 @@ describe('how_to_use orders', () => {
     expect(res.content[0].text).toContain('calculate_order_shipping');
   });
 });
+
+describe('list_orders paging', () => {
+  // Negative or fractional values would otherwise reach the Printify API.
+  it.each([{ page: 0 }, { page: -1 }, { page: 1.5 }, { limit: 0 }, { limit: -5 }, { limit: 2.5 }])(
+    'rejects %j at the schema', async (args) => {
+      const h = harness({ printifyClient: fakePrintify() });
+      await expect(h.callParsed('list_orders', args)).rejects.toThrow();
+    });
+
+  it('accepts positive integers', async () => {
+    let seen: any;
+    const h = harness({ printifyClient: fakePrintify({ listOrders: async (opts: any) => { seen = opts; return { data: [] }; } }) });
+    const res = await h.callParsed('list_orders', { page: 2, limit: 5 });
+    expect(res.isError).toBeFalsy();
+    expect(seen).toEqual({ page: 2, limit: 5 });
+  });
+});
