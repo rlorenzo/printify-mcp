@@ -1,6 +1,6 @@
 {
   "name": "@rlorenzo/printify-mcp",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "A Model Context Protocol (MCP) server for integrating AI assistants with Printify's print-on-demand platform",
   "type": "module",
   "main": "dist/exports.js",

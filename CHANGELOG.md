@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-28
+
 ### Added
 - `set_publish_succeeded`, `set_publish_failed` and `notify_unpublished`
   report publishing results for custom (API) sales channels, so products do
