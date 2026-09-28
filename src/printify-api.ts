@@ -37,6 +37,19 @@ function pathId(value: string | number, label: string): string {
 }
 
 /**
+ * A catalog id checked before the SDK puts it into a URL path. The SDK does
+ * not encode ids, and these come from the model: a value like "3/../../shops"
+ * would otherwise reach a different endpoint with the account's API key.
+ */
+function catalogId(value: string | number, label: string): string {
+  const id = String(value).trim();
+  if (!/^\d+$/.test(id)) {
+    throw new Error(`${label} must be a numeric id, got "${String(value).slice(0, 40)}"`);
+  }
+  return id;
+}
+
+/**
  * Placeholders for one print-area entry. `{ position, imageId }` becomes a
  * centred, unscaled image; placeholders with their own `images` pass through.
  */
@@ -412,11 +425,54 @@ export class PrintifyAPI {
     }
   }
 
-  async getVariants(blueprintId: string, printProviderId: string) {
+  /**
+   * A blueprint's variants from one provider. The API hides out-of-stock
+   * variants unless asked; the SDK method takes no query options, so that case
+   * goes through the SDK's own authenticated request.
+   */
+  async getVariants(blueprintId: string, printProviderId: string, options: { showOutOfStock?: boolean } = {}) {
     try {
-      return await this.client.catalog.getBlueprintVariants(blueprintId, printProviderId);
+      if (!options.showOutOfStock) {
+        return await this.client.catalog.getBlueprintVariants(blueprintId, printProviderId);
+      }
+      const url = `/v1/catalog/blueprints/${encodeURIComponent(blueprintId)}` +
+        `/print_providers/${encodeURIComponent(printProviderId)}/variants.json`;
+      return await this.client.catalog.request(url, { method: 'GET', params: { 'show-out-of-stock': 1 } });
     } catch (error) {
       console.error(`Error fetching variants for blueprint ${blueprintId} and print provider ${printProviderId}:`, describeError(error));
+      throw error;
+    }
+  }
+
+  /** Every print provider in the catalog, not just those offering one blueprint. */
+  async listAllPrintProviders() {
+    try {
+      return await this.client.catalog.listProviders();
+    } catch (error) {
+      console.error('Error fetching print providers:', describeError(error));
+      throw error;
+    }
+  }
+
+  /** One print provider, with its location and the blueprints it offers. */
+  async getPrintProvider(printProviderId: string) {
+    const id = catalogId(printProviderId, 'printProviderId');
+    try {
+      return await this.client.catalog.getProvider(id);
+    } catch (error) {
+      console.error(`Error fetching print provider ${id}:`, describeError(error));
+      throw error;
+    }
+  }
+
+  /** Shipping costs and handling time for a blueprint from one provider. */
+  async getShipping(blueprintId: string, printProviderId: string) {
+    const blueprint = catalogId(blueprintId, 'blueprintId');
+    const provider = catalogId(printProviderId, 'printProviderId');
+    try {
+      return await this.client.catalog.getVariantShipping(blueprint, provider);
+    } catch (error) {
+      console.error(`Error fetching shipping for blueprint ${blueprint} and print provider ${provider}:`, describeError(error));
       throw error;
     }
   }

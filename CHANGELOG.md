@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (which requires `confirm: true`, since it charges the account) prints it,
   and `cancel_order` cancels one that is on hold or awaiting payment.
 - An `orders` topic for `how_to_use`.
+- `list_all_print_providers` and `get_print_provider` browse the catalog's
+  print providers directly, not only through a blueprint.
+- `get_shipping` reports a blueprint's shipping costs and handling time from a
+  provider, optionally for one country.
+- `get_variants` takes `showOutOfStock` to include variants the API hides
+  because they are out of stock.
 
 ### Fixed
 - Defaults changed with `set_default` for `outputFormat`, `safetyTolerance`,
