@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `list_uploads`, `get_upload` and `archive_upload` find, inspect and archive
+  images in the account's upload library.
 - `list_orders` and `get_order` read the current shop's orders. Lists leave
   out street addresses and contact details; `get_order` returns them for one
   order.

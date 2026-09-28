@@ -110,7 +110,7 @@ describe('image tool schemas (31-line duplicated schema)', () => {
 
 describe('tool surface', () => {
   it('registers exactly the expected tools', () => {
-    expect(harness().names()).toHaveLength(28);
+    expect(harness().names()).toHaveLength(31);
   });
 });
 
@@ -250,5 +250,18 @@ describe('get_variants showOutOfStock', () => {
     const res = await h.callParsed('get_variants', { blueprintId: '12', printProviderId: '29', showOutOfStock: true });
     expect(res.isError).toBeFalsy();
     expect(calls).toEqual([['12', '29', { showOutOfStock: true }]]);
+  });
+});
+
+describe('upload library tools', () => {
+  it.each(['list_uploads', 'get_upload', 'archive_upload'])('%s needs the Printify client', async (name) => {
+    const res = await harness({ printifyClient: null }).call(name, {});
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('Printify API client is not initialized');
+  });
+
+  it('archive_upload is marked destructive', () => {
+    const tools = (harness() as any).server._registeredTools;
+    expect(tools.archive_upload.annotations.destructiveHint).toBe(true);
   });
 });

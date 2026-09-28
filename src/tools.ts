@@ -17,6 +17,7 @@ import * as shops from "./services/printify-shops.js";
 import * as products from "./services/printify-products.js";
 import * as blueprints from "./services/printify-blueprints.js";
 import * as orders from "./services/printify-orders.js";
+import * as uploads from "./services/printify-uploads.js";
 import { uploadImageToPrintify, determineImageSourceType } from "./services/printify-uploader.js";
 import axios from "axios";
 import FormData from "form-data";
@@ -587,6 +588,30 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
     const options = mergeGenerationOptions(defaultsFor(ctx).getAllDefaults(), args);
     return { options, result: generateImage(replicate, prompt, fileName, options) };
   };
+
+  server.tool(
+    "list_uploads",
+    {
+      page: z.number().optional().default(1).describe("Page number"),
+      limit: z.number().optional().default(10).describe("Number of images per page")
+    },
+    READ_ONLY,
+    withPrintify((client, { page, limit }) => uploads.listUploads(client, { page, limit }))
+  );
+
+  server.tool(
+    "get_upload",
+    { imageId: z.string().describe("Uploaded image ID") },
+    READ_ONLY,
+    withPrintify((client, { imageId }) => uploads.getUpload(client, imageId))
+  );
+
+  server.tool(
+    "archive_upload",
+    { imageId: z.string().describe("Uploaded image ID") },
+    { title: "Archive uploaded image", destructiveHint: true, idempotentHint: true },
+    withPrintify((client, { imageId }) => uploads.archiveUpload(client, imageId))
+  );
 
   server.tool(
     "generate_and_upload_image",

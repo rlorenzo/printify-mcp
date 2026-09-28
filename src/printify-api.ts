@@ -545,6 +545,37 @@ export class PrintifyAPI {
     }
   }
 
+  /** One page of the account's uploaded images. */
+  async listUploads(page = 1, limit = 10) {
+    try {
+      return await this.client.uploads.list(page, limit);
+    } catch (error) {
+      console.error('Error fetching uploads:', describeError(error));
+      throw error;
+    }
+  }
+
+  async getUpload(imageId: string) {
+    const id = pathId(imageId, 'imageId');
+    try {
+      return await this.client.uploads.getById(id);
+    } catch (error) {
+      console.error(`Error fetching upload ${id}:`, describeError(error));
+      throw error;
+    }
+  }
+
+  /** Archive an uploaded image, removing it from the upload library. */
+  async archiveUpload(imageId: string) {
+    const id = pathId(imageId, 'imageId');
+    try {
+      return await this.client.uploads.archive(id);
+    } catch (error) {
+      console.error(`Error archiving upload ${id}:`, describeError(error));
+      throw error;
+    }
+  }
+
   /** Attach the API's status and validation errors to a thrown error for callers. */
   private enhanceError(error: any, requestData?: any): any {
     if (error.response) {

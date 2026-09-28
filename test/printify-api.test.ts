@@ -685,6 +685,32 @@ describe('initialize and getShops', () => {
   });
 });
 
+describe('upload library', () => {
+  it('lists, gets and archives through the SDK', async () => {
+    const list = vi.fn(async () => ({ data: [] }));
+    const getById = vi.fn(async (id: string) => ({ id }));
+    const archive = vi.fn(async () => undefined);
+    const { instance } = api({ uploads: { list, getById, archive } });
+    await instance.listUploads(2, 5);
+    await instance.getUpload('5e16d667');
+    await instance.archiveUpload('5e16d667');
+    expect(list).toHaveBeenCalledWith(2, 5);
+    expect(getById).toHaveBeenCalledWith('5e16d667');
+    expect(archive).toHaveBeenCalledWith('5e16d667');
+  });
+
+  // The SDK interpolates the id into the URL unencoded.
+  it.each(['x/../../shops', 'x?y=1', ''])('rejects the image id %j before any request', async (bad) => {
+    const getById = vi.fn();
+    const archive = vi.fn();
+    const { instance } = api({ uploads: { getById, archive } });
+    await expect(instance.getUpload(bad)).rejects.toThrow(/imageId must be a plain id/);
+    await expect(instance.archiveUpload(bad)).rejects.toThrow(/imageId must be a plain id/);
+    expect(getById).not.toHaveBeenCalled();
+    expect(archive).not.toHaveBeenCalled();
+  });
+});
+
 describe('orders', () => {
   it('lists, gets and quotes through the SDK', async () => {
     const list = vi.fn(async () => ({ current_page: 1, data: [] }));
