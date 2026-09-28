@@ -172,6 +172,22 @@ describe('getVariants', () => {
     expect(result.page!.total).toBe(0);
   });
 
+  it('hides out-of-stock variants by default and says so', async () => {
+    let seen: any;
+    const client = fakeClient({ getVariants: async (_b: string, _p: string, opts: any) => { seen = opts; return variants(2); } });
+    const text = (await getVariants(client, '1', '2', {})).response!.content[0].text;
+    expect(seen).toEqual({ showOutOfStock: undefined });
+    expect(text).toContain('**Out Of Stock**: "hidden (pass showOutOfStock: true to include)"');
+  });
+
+  it('asks the client for out-of-stock variants when requested', async () => {
+    let seen: any;
+    const client = fakeClient({ getVariants: async (_b: string, _p: string, opts: any) => { seen = opts; return variants(2); } });
+    const text = (await getVariants(client, '1', '2', { showOutOfStock: true })).response!.content[0].text;
+    expect(seen).toEqual({ showOutOfStock: true });
+    expect(text).toContain('**Out Of Stock**: "included"');
+  });
+
   it('reports a failure without throwing', async () => {
     const client = fakeClient({ getVariants: async () => { throw new Error('provider gone'); } });
     const result = await getVariants(client, '1', '2', {});

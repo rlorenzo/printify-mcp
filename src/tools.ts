@@ -307,11 +307,13 @@ export function registerTools(server: McpServer, ctx: PrintifyContext): void {
       blueprintId: z.string().describe("Blueprint ID"),
       printProviderId: z.string().describe("Print provider ID"),
       page: z.number().optional().default(1).describe("Page number"),
-      limit: z.number().optional().default(50).describe("Number of variants per page (max 100)")
+      limit: z.number().optional().default(50).describe("Number of variants per page (max 100)"),
+      showOutOfStock: z.boolean().optional()
+        .describe("Include variants that are currently out of stock (the API hides them by default)")
     },
     READ_ONLY,
-    withPrintify((client, { blueprintId, printProviderId, page, limit }) =>
-      blueprints.getVariants(client, blueprintId, printProviderId, { page, limit }))
+    withPrintify((client, { blueprintId, printProviderId, page, limit, showOutOfStock }) =>
+      blueprints.getVariants(client, blueprintId, printProviderId, { page, limit, showOutOfStock }))
   );
 
   server.tool(

@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   print providers directly, not only through a blueprint.
 - `get_shipping` reports a blueprint's shipping costs and handling time from a
   provider, optionally for one country.
+- `get_variants` takes `showOutOfStock` to include variants the API hides
+  because they are out of stock.
 
 ### Fixed
 - Defaults changed with `set_default` for `outputFormat`, `safetyTolerance`,

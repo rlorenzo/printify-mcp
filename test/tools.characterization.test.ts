@@ -142,3 +142,17 @@ describe('catalog provider and shipping tools', () => {
     expect(res.content[0].text).toContain('Printify API client is not initialized');
   });
 });
+
+describe('get_variants showOutOfStock', () => {
+  it('passes the flag from the tool arguments to the client', async () => {
+    const calls: any[] = [];
+    const h = harness({
+      printifyClient: fakePrintify({
+        getVariants: async (...args: any[]) => { calls.push(args); return { variants: [] }; }
+      })
+    });
+    const res = await h.callParsed('get_variants', { blueprintId: '12', printProviderId: '29', showOutOfStock: true });
+    expect(res.isError).toBeFalsy();
+    expect(calls).toEqual([['12', '29', { showOutOfStock: true }]]);
+  });
+});
