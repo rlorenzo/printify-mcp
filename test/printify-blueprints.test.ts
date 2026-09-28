@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getBlueprints, getVariants } from '../src/services/printify-blueprints.js';
+import { getBlueprints, getVariants, listAllPrintProviders, getPrintProvider, getShipping } from '../src/services/printify-blueprints.js';
 
 function fakeClient(overrides: Record<string, any> = {}) {
   return {
@@ -193,5 +193,127 @@ describe('getVariants', () => {
     const result = await getVariants(client, '1', '2', {});
     expect(result.success).toBe(false);
     expect(result.errorResponse!.content[0].text).toMatch(/provider gone/);
+  });
+});
+
+describe('listAllPrintProviders', () => {
+  const providers = (n: number) => Array.from({ length: n }, (_, i) => ({
+    id: i + 1,
+    title: `Provider ${i + 1}`,
+    location: { address1: '1 Main St', city: 'Brooklyn', region: 'NY', country: 'US', zip: '11221' }
+  }));
+
+  it('pages the providers and keeps only id, title and a short location', async () => {
+    const client = fakeClient({ listAllPrintProviders: async () => providers(45) });
+    const result = await listAllPrintProviders(client, { page: 3, limit: 20 });
+    expect(result.page!.items).toEqual([
+      { id: 41, title: 'Provider 41', location: 'Brooklyn, NY, US' },
+      { id: 42, title: 'Provider 42', location: 'Brooklyn, NY, US' },
+      { id: 43, title: 'Provider 43', location: 'Brooklyn, NY, US' },
+      { id: 44, title: 'Provider 44', location: 'Brooklyn, NY, US' },
+      { id: 45, title: 'Provider 45', location: 'Brooklyn, NY, US' }
+    ]);
+    const text = result.response!.content[0].text;
+    expect(text).toContain('**Total**: "45"');
+    expect(text).not.toContain('1 Main St');
+  });
+
+  it('reports a failure without throwing', async () => {
+    const client = fakeClient({ listAllPrintProviders: async () => { throw new Error('catalog down'); } });
+    const result = await listAllPrintProviders(client);
+    expect(result.success).toBe(false);
+    expect(result.errorResponse!.content[0].text).toMatch(/catalog down/);
+  });
+});
+
+describe('getPrintProvider', () => {
+  it('reports the location and pages the blueprints as summaries', async () => {
+    const provider = {
+      id: 29,
+      title: 'Monster Digital',
+      location: { city: 'Charlotte', region: 'NC', country: 'US' },
+      blueprints: Array.from({ length: 30 }, (_, i) => fakeBlueprint(i + 1))
+    };
+    const client = fakeClient({ getPrintProvider: async () => provider });
+    const result = await getPrintProvider(client, '29', { page: 2, limit: 20 });
+    expect(result.page!.items).toHaveLength(10);
+    expect(result.page!.items[0]).toEqual({ id: 21, title: 'Blueprint 21', brand: 'Test Brand', model: 'M-21' });
+    const text = result.response!.content[0].text;
+    expect(text).toContain('**Location**: "Charlotte, NC, US"');
+    expect(text).toContain('**Blueprints Total**: "30"');
+    // Blueprint descriptions are long HTML; only summaries are returned.
+    expect(text).not.toContain('<p>');
+  });
+});
+
+describe('getShipping', () => {
+  const shipping = {
+    handling_time: { value: 3, unit: 'day' },
+    profiles: [
+      { variant_ids: [1, 2], first_item: { cost: 450, currency: 'USD' }, additional_items: { cost: 200, currency: 'USD' }, countries: ['US'] },
+      { variant_ids: [1, 2], first_item: { cost: 650, currency: 'USD' }, additional_items: { cost: 300, currency: 'USD' }, countries: ['CA', 'DE'] },
+      { variant_ids: [1, 2], first_item: { cost: 1100, currency: 'USD' }, additional_items: { cost: 500, currency: 'USD' }, countries: ['REST_OF_THE_WORLD'] }
+    ]
+  };
+
+  it('lists every profile with costs in currency units', async () => {
+    const client = fakeClient({ getShipping: async () => shipping });
+    const text = (await getShipping(client, '12', '29')).response!.content[0].text;
+    expect(text).toContain('**Handling Time**: "3 days"');
+    expect(text).toContain('"firstItem":"4.50 USD"');
+    expect(text).toContain('"additionalItem":"5.00 USD"');
+    expect(text).toContain('"variantCount":2');
+  });
+
+  it('narrows to the profiles for a country, case-insensitively', async () => {
+    const client = fakeClient({ getShipping: async () => shipping });
+    const text = (await getShipping(client, '12', '29', { country: 'de' })).response!.content[0].text;
+    expect(text).toContain('**Country**: "DE"');
+    expect(text).toContain('"firstItem":"6.50 USD"');
+    expect(text).not.toContain('4.50 USD');
+    expect(text).not.toContain('11.00 USD');
+  });
+
+  it('falls back to REST_OF_THE_WORLD for a country no profile names', async () => {
+    const client = fakeClient({ getShipping: async () => shipping });
+    const text = (await getShipping(client, '12', '29', { country: 'JP' })).response!.content[0].text;
+    expect(text).toContain('"firstItem":"11.00 USD"');
+    expect(text).toContain('No profile names JP; showing REST_OF_THE_WORLD rates.');
+  });
+
+  it('says so when the provider does not ship to the country at all', async () => {
+    const client = fakeClient({ getShipping: async () => ({ ...shipping, profiles: shipping.profiles.slice(0, 1) }) });
+    const text = (await getShipping(client, '12', '29', { country: 'JP' })).response!.content[0].text;
+    expect(text).toContain('This provider does not ship this blueprint to JP.');
+    expect(text).toContain('**Profiles**: []');
+  });
+
+  // Profiles are split by variant: a country's rate for one group must not
+  // hide another group that only has a REST_OF_THE_WORLD rate.
+  it('picks the profile per variant group', async () => {
+    const split = {
+      handling_time: { value: 2, unit: 'day' },
+      profiles: [
+        { variant_ids: [1, 2], first_item: { cost: 450, currency: 'USD' }, additional_items: { cost: 0, currency: 'USD' }, countries: ['US'] },
+        { variant_ids: [1, 2], first_item: { cost: 1100, currency: 'USD' }, additional_items: { cost: 0, currency: 'USD' }, countries: ['REST_OF_THE_WORLD'] },
+        { variant_ids: [3], first_item: { cost: 900, currency: 'USD' }, additional_items: { cost: 0, currency: 'USD' }, countries: ['REST_OF_THE_WORLD'] },
+        { variant_ids: [4], first_item: { cost: 300, currency: 'USD' }, additional_items: { cost: 0, currency: 'USD' }, countries: ['DE'] }
+      ]
+    };
+    const client = fakeClient({ getShipping: async () => split });
+    const text = (await getShipping(client, '12', '29', { country: 'US' })).response!.content[0].text;
+    expect(text).toContain('"firstItem":"4.50 USD"');
+    expect(text).toContain('"firstItem":"9.00 USD"');
+    expect(text).not.toContain('11.00 USD');
+    expect(text).not.toContain('3.00 USD');
+    expect(text).toContain('Some variants have no US profile; they show REST_OF_THE_WORLD rates.');
+    expect(text).toContain('1 variant(s) do not ship to US: 4.');
+  });
+
+  it('reports a failure without throwing', async () => {
+    const client = fakeClient({ getShipping: async () => { throw new Error('no such provider'); } });
+    const result = await getShipping(client, '12', '29');
+    expect(result.success).toBe(false);
+    expect(result.errorResponse!.content[0].text).toMatch(/no such provider/);
   });
 });
