@@ -110,7 +110,7 @@ describe('image tool schemas (31-line duplicated schema)', () => {
 
 describe('tool surface', () => {
   it('registers exactly the expected tools', () => {
-    expect(harness().names()).toHaveLength(22);
+    expect(harness().names()).toHaveLength(25);
   });
 });
 
@@ -148,6 +148,27 @@ describe('order tools', () => {
   });
 });
 
+describe('catalog provider and shipping tools', () => {
+  it('get_shipping passes the ids and country through to the client', async () => {
+    const calls: any[] = [];
+    const h = harness({
+      printifyClient: fakePrintify({
+        getShipping: async (...args: any[]) => { calls.push(args); return { handling_time: { value: 1, unit: 'day' }, profiles: [] }; }
+      })
+    });
+    const res = await h.callParsed('get_shipping', { blueprintId: '12', printProviderId: '29', country: 'US' });
+    expect(res.isError).toBeFalsy();
+    expect(res.content[0].text).toContain('**Country**: "US"');
+    expect(calls).toEqual([['12', '29']]);
+  });
+
+  it.each(['list_all_print_providers', 'get_print_provider', 'get_shipping'])('%s needs the Printify client', async (name) => {
+    const res = await harness({ printifyClient: null }).call(name, {});
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('Printify API client is not initialized');
+  });
+});
+
 describe('how_to_use orders', () => {
   it('serves the orders guide', async () => {
     const res = await harness().call('how_to_use', { topic: 'orders' });
@@ -170,5 +191,19 @@ describe('list_orders paging', () => {
     const res = await h.callParsed('list_orders', { page: 2, limit: 5 });
     expect(res.isError).toBeFalsy();
     expect(seen).toEqual({ page: 2, limit: 5 });
+  });
+});
+
+describe('get_variants showOutOfStock', () => {
+  it('passes the flag from the tool arguments to the client', async () => {
+    const calls: any[] = [];
+    const h = harness({
+      printifyClient: fakePrintify({
+        getVariants: async (...args: any[]) => { calls.push(args); return { variants: [] }; }
+      })
+    });
+    const res = await h.callParsed('get_variants', { blueprintId: '12', printProviderId: '29', showOutOfStock: true });
+    expect(res.isError).toBeFalsy();
+    expect(calls).toEqual([['12', '29', { showOutOfStock: true }]]);
   });
 });

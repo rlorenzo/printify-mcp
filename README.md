@@ -90,7 +90,10 @@ listed on the [GitHub Releases page](https://github.com/rlorenzo/printify-mcp/re
 | `get_blueprints` | List catalog blueprints (`page`, `limit`) |
 | `get_blueprint` | Get a blueprint (`blueprintId`) |
 | `get_print_providers` | Print providers for a blueprint (`blueprintId`) |
-| `get_variants` | Variants for a blueprint and provider (`blueprintId`, `printProviderId`) |
+| `list_all_print_providers` | Every print provider in the catalog, with location (`page`, `limit`) |
+| `get_print_provider` | A provider's location and the blueprints it offers (`printProviderId`, `page`, `limit`) |
+| `get_shipping` | Shipping costs and handling time for a blueprint from a provider (`blueprintId`, `printProviderId`, optional `country`) |
+| `get_variants` | Variants for a blueprint and provider (`blueprintId`, `printProviderId`; `showOutOfStock` to include out-of-stock ones) |
 | `list_orders` | The shop's orders, summarized (`page`, `limit`, optional `status`, `sku`) |
 | `get_order` | One order's items, costs, shipping address and tracking (`orderId`) |
 | `calculate_order_shipping` | Quote shipping per method for items to a destination, without ordering (`lineItems`, `address`) |

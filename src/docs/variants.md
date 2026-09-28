@@ -10,6 +10,8 @@ Example: `{ "id": 18100, "title": "Black / S", "options": { "color": "Black", "s
 
 The response also lists the available placeholder positions (front, back, ...).
 
+Out-of-stock variants are hidden by default. Pass `showOutOfStock: true` to include them.
+
 In `create_product`, list the variants to sell with prices in cents:
 
 ```javascript

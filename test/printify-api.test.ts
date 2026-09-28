@@ -712,3 +712,70 @@ describe('orders', () => {
     await expect(instance.listOrders()).rejects.toThrow(/Shop ID is not set/);
   });
 });
+
+describe('catalog providers and shipping', () => {
+  it('lists every provider through the SDK', async () => {
+    const listProviders = vi.fn(async () => [{ id: 1 }]);
+    const { instance } = api({ catalog: { listProviders } });
+    expect(await instance.listAllPrintProviders()).toEqual([{ id: 1 }]);
+  });
+
+  it('fetches one provider and one blueprint\'s shipping by id', async () => {
+    const getProvider = vi.fn(async (id: string) => ({ id }));
+    const getVariantShipping = vi.fn(async () => ({ profiles: [] }));
+    const { instance } = api({ catalog: { getProvider, getVariantShipping } });
+    await instance.getPrintProvider(' 29 ');
+    await instance.getShipping('12', '29');
+    expect(getProvider).toHaveBeenCalledWith('29');
+    expect(getVariantShipping).toHaveBeenCalledWith('12', '29');
+  });
+
+  // The SDK interpolates ids into the URL unencoded; a crafted id must not
+  // reach another endpoint with the account's key.
+  it.each(['12/../../shops', '29?x=1', '', 'abc'])('rejects the non-numeric id %j before any request', async (bad) => {
+    const getProvider = vi.fn();
+    const getVariantShipping = vi.fn();
+    const { instance } = api({ catalog: { getProvider, getVariantShipping } });
+    await expect(instance.getPrintProvider(bad)).rejects.toThrow(/printProviderId must be a numeric id/);
+    await expect(instance.getShipping(bad, '29')).rejects.toThrow(/blueprintId must be a numeric id/);
+    await expect(instance.getShipping('12', bad)).rejects.toThrow(/printProviderId must be a numeric id/);
+    expect(getProvider).not.toHaveBeenCalled();
+    expect(getVariantShipping).not.toHaveBeenCalled();
+  });
+});
+
+describe('getVariants', () => {
+  // The SDK's getBlueprintVariants takes no query options, and the API leaves
+  // out-of-stock variants out unless show-out-of-stock is passed.
+  it('uses the SDK method when out-of-stock variants are not asked for', async () => {
+    const getBlueprintVariants = vi.fn(async () => ({ variants: [] }));
+    const request = vi.fn();
+    const { instance } = api({ catalog: { getBlueprintVariants, request } });
+    await instance.getVariants('12', '29');
+    expect(getBlueprintVariants).toHaveBeenCalledWith('12', '29');
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('passes show-out-of-stock through the SDK request when asked', async () => {
+    const getBlueprintVariants = vi.fn();
+    const request = vi.fn(async () => ({ variants: [{ id: 1 }] }));
+    const { instance } = api({ catalog: { getBlueprintVariants, request } });
+    const result = await instance.getVariants('12', '29', { showOutOfStock: true });
+    expect(result).toEqual({ variants: [{ id: 1 }] });
+    expect(getBlueprintVariants).not.toHaveBeenCalled();
+    expect(request).toHaveBeenCalledWith(
+      '/v1/catalog/blueprints/12/print_providers/29/variants.json',
+      { method: 'GET', params: { 'show-out-of-stock': 1 } }
+    );
+  });
+
+  // The ids come from the model; they must not be able to reshape the path.
+  it('encodes the ids in the request path', async () => {
+    const request = vi.fn(async () => ({ variants: [] }));
+    const { instance } = api({ catalog: { request } });
+    await instance.getVariants('12/../../shops', '29?x=1', { showOutOfStock: true });
+    expect(request.mock.calls[0][0]).toBe(
+      '/v1/catalog/blueprints/12%2F..%2F..%2Fshops/print_providers/29%3Fx%3D1/variants.json'
+    );
+  });
+});
