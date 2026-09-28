@@ -110,7 +110,7 @@ describe('image tool schemas (31-line duplicated schema)', () => {
 
 describe('tool surface', () => {
   it('registers exactly the expected tools', () => {
-    expect(harness().names()).toHaveLength(25);
+    expect(harness().names()).toHaveLength(28);
   });
 });
 
@@ -174,6 +174,51 @@ describe('how_to_use orders', () => {
     const res = await harness().call('how_to_use', { topic: 'orders' });
     expect(res.isError).toBeFalsy();
     expect(res.content[0].text).toContain('calculate_order_shipping');
+  });
+});
+
+describe('order change tools', () => {
+  // Sending to production spends money, so it takes an explicit confirmation.
+  it('send_order_to_production requires confirm: true', async () => {
+    const sent: string[] = [];
+    const h = harness({
+      printifyClient: fakePrintify({ sendOrderToProduction: async (id: string) => { sent.push(id); return { id }; } })
+    });
+    await expect(h.callParsed('send_order_to_production', { orderId: 'o1' })).rejects.toThrow();
+    await expect(h.callParsed('send_order_to_production', { orderId: 'o1', confirm: false })).rejects.toThrow();
+    expect(sent).toEqual([]);
+    const res = await h.callParsed('send_order_to_production', { orderId: 'o1', confirm: true });
+    expect(res.isError).toBeFalsy();
+    expect(sent).toEqual(['o1']);
+  });
+
+  it('create_order requires the full shipping address', async () => {
+    const h = harness({ printifyClient: fakePrintify({ createOrder: async () => ({ id: 'o' }) }) });
+    await expect(h.callParsed('create_order', {
+      lineItems: [{ sku: 'S', quantity: 1 }],
+      address: { country: 'US', zip: '10001' }
+    })).rejects.toThrow();
+  });
+
+  it('marks sending to production and cancelling as destructive', () => {
+    const tools = (harness() as any).server._registeredTools;
+    expect(tools.send_order_to_production.annotations.destructiveHint).toBe(true);
+    expect(tools.cancel_order.annotations.destructiveHint).toBe(true);
+  });
+});
+
+describe('create_order shipping methods', () => {
+  // Code 3 is Printify Express; a bare "express" would be confused with the
+  // separate Express rate that calculate_order_shipping quotes.
+  it('accepts printify_express and rejects a bare express', async () => {
+    let sent: any;
+    const h = harness({ printifyClient: fakePrintify({ createOrder: async (data: any) => { sent = data; return { id: 'o' }; } }) });
+    const address = { firstName: 'A', lastName: 'B', address1: '1 St', city: 'C', zip: '1', country: 'US' };
+    await expect(h.callParsed('create_order', { lineItems: [{ sku: 'S', quantity: 1 }], address, shippingMethod: 'express' })).rejects.toThrow();
+    const res = await h.callParsed('create_order', { lineItems: [{ sku: 'S', quantity: 1 }], address, shippingMethod: 'printify_express' });
+    expect(res.isError).toBeFalsy();
+    expect(sent.shipping_method).toBe(3);
+    expect(sent.is_printify_express).toBe(true);
   });
 });
 

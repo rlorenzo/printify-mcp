@@ -510,6 +510,41 @@ export class PrintifyAPI {
     }
   }
 
+  /** Create an order. Printify holds it as a draft until it is sent to production. */
+  async createOrder(data: any) {
+    const shopId = this.requireShopId();
+    try {
+      return await this.client.orders.submit(data);
+    } catch (error) {
+      console.error(`Error creating order for shop ${shopId}:`, describeError(error));
+      throw error;
+    }
+  }
+
+  /** Release an on-hold order for printing; this is where Printify charges for it. */
+  async sendOrderToProduction(orderId: string) {
+    this.requireShopId();
+    const id = pathId(orderId, 'orderId');
+    try {
+      return await this.client.orders.sendToProduction(id);
+    } catch (error) {
+      console.error(`Error sending order ${id} to production:`, describeError(error));
+      throw error;
+    }
+  }
+
+  /** Cancel an order that is still on hold or awaiting payment. */
+  async cancelOrder(orderId: string) {
+    this.requireShopId();
+    const id = pathId(orderId, 'orderId');
+    try {
+      return await this.client.orders.cancelUnpaid(id);
+    } catch (error) {
+      console.error(`Error cancelling order ${id}:`, describeError(error));
+      throw error;
+    }
+  }
+
   /** Attach the API's status and validation errors to a thrown error for callers. */
   private enhanceError(error: any, requestData?: any): any {
     if (error.response) {

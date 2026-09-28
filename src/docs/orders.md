@@ -23,3 +23,19 @@ calculate_order_shipping({
 ```
 
 Nothing is ordered by these tools.
+
+## Placing an order
+
+`create_order` creates the order on hold; nothing is charged yet. Shipping is `standard` unless `shippingMethod` says `priority`, `printify_express` (Printify Express, eligible products only) or `economy`.
+
+```javascript
+create_order({
+  lineItems: [{ productId: "5bfd0b66a342bcc9b5563216", variantId: 17887, quantity: 1 }],
+  address: { firstName: "Ada", lastName: "Lovelace", address1: "1 Main St", city: "Brooklyn", zip: "11221", country: "US", region: "NY" }
+})
+```
+
+Check it with `get_order`, then either:
+
+- `send_order_to_production({ orderId, confirm: true })` prints and ships it. **This charges the Printify account.**
+- `cancel_order({ orderId })` drops it. Only orders on hold or awaiting payment can be cancelled this way.

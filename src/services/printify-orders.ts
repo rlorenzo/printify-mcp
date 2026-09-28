@@ -1,6 +1,7 @@
 /**
- * Printify orders service: reading orders and quoting shipping.
+ * Printify orders service: reading, quoting, placing and cancelling orders.
  */
+import { randomUUID } from 'crypto';
 import { PrintifyAPI, requireShop } from '../printify-api.js';
 import { formatSuccessResponse, runService, TIPS } from '../utils/error-handler.js';
 
@@ -233,6 +234,173 @@ export async function calculateOrderShipping(
             Rates: rates
           },
           'Rates are for the whole order, converted from cents. Nothing was ordered.'
+        )
+      };
+    }
+  );
+}
+
+interface NewOrderItem {
+  productId?: string;
+  variantId?: number;
+  printProviderId?: number;
+  blueprintId?: number;
+  /** Position (front, back, ...) to image URL, for an item not saved as a product. */
+  printAreas?: Record<string, string>;
+  sku?: string;
+  quantity: number;
+}
+
+interface OrderAddress extends ShippingQuoteAddress {
+  firstName: string;
+  lastName: string;
+  address1: string;
+  city: string;
+  zip: string;
+  company?: string;
+}
+
+type ShippingMethod = 'standard' | 'priority' | 'printify_express' | 'economy';
+
+/**
+ * Printify's shipping_method codes, with the is_printify_express and
+ * is_economy_shipping flags kept consistent with them. Code 3 is Printify
+ * Express (eligible products only), which is not the "express" rate a
+ * shipping quote lists separately.
+ */
+const SHIPPING_METHOD_CODES: Record<ShippingMethod, { code: number; express: boolean; economy: boolean }> = {
+  standard: { code: 1, express: false, economy: false },
+  priority: { code: 2, express: false, economy: false },
+  printify_express: { code: 3, express: true, economy: false },
+  economy: { code: 4, express: false, economy: true }
+};
+
+export async function createOrder(
+  printifyClient: PrintifyAPI,
+  input: {
+    lineItems: NewOrderItem[];
+    address: OrderAddress;
+    shippingMethod?: ShippingMethod;
+    externalId?: string;
+    label?: string;
+    sendShippingNotification?: boolean;
+  }
+) {
+  // The API requires external_id (the order's id in the caller's own system);
+  // callers without one get a generated id. It is chosen before the request
+  // so a failure can still report it: a request that timed out may have
+  // created the order anyway.
+  const externalId = input.externalId ?? randomUUID();
+
+  return runService(
+    'Create Order',
+    {
+      context: () => ({
+        Country: input.address?.country,
+        Items: input.lineItems?.length ?? 0,
+        'External Id': externalId
+      }),
+      tips: [
+        'The order may have been created even though this call failed; check recent on-hold orders with list_orders before retrying',
+        'Identify each item by productId + variantId, by printProviderId + blueprintId + variantId with printAreas, or by sku',
+        'The address needs a name, street, city, zip and country',
+        TIPS.apiKey,
+        TIPS.shop
+      ]
+    },
+    async () => {
+      requireShop(printifyClient);
+      const method = SHIPPING_METHOD_CODES[input.shippingMethod ?? 'standard'];
+      const created: any = await printifyClient.createOrder({
+        external_id: externalId,
+        ...(input.label ? { label: input.label } : {}),
+        line_items: input.lineItems.map((item) => compact({
+          product_id: item.productId,
+          variant_id: item.variantId,
+          print_provider_id: item.printProviderId,
+          blueprint_id: item.blueprintId,
+          print_areas: item.printAreas,
+          sku: item.sku,
+          quantity: item.quantity
+        })),
+        shipping_method: method.code,
+        is_printify_express: method.express,
+        is_economy_shipping: method.economy,
+        send_shipping_notification: input.sendShippingNotification ?? false,
+        address_to: compact({
+          first_name: input.address.firstName,
+          last_name: input.address.lastName,
+          email: input.address.email,
+          phone: input.address.phone,
+          country: input.address.country.trim().toUpperCase(),
+          region: input.address.region ?? '',
+          address1: input.address.address1,
+          address2: input.address.address2,
+          city: input.address.city,
+          zip: input.address.zip,
+          company: input.address.company
+        })
+      });
+
+      return {
+        order: created,
+        response: formatSuccessResponse(
+          'Order Created (On Hold)',
+          {
+            'Order Id': created?.id,
+            'External Id': externalId,
+            'Shipping Method': input.shippingMethod ?? 'standard',
+            Items: input.lineItems.reduce((n, item) => n + item.quantity, 0)
+          },
+          'The order is on hold and nothing has been charged. Review it with get_order, then ' +
+          'send_order_to_production to have it printed, or cancel_order to drop it.'
+        )
+      };
+    }
+  );
+}
+
+export async function sendOrderToProduction(printifyClient: PrintifyAPI, orderId: string) {
+  return runService(
+    'Send Order To Production',
+    {
+      context: () => ({ OrderId: orderId, Shop: printifyClient.getCurrentShop() }),
+      tips: ['Only an on-hold order can be sent to production', 'Check the order with get_order', TIPS.shop]
+    },
+    async () => {
+      requireShop(printifyClient);
+      const result: any = await printifyClient.sendOrderToProduction(orderId);
+      return {
+        result,
+        response: formatSuccessResponse(
+          'Order Sent To Production',
+          { 'Order Id': result?.id ?? orderId, Status: result?.status ?? 'sending-to-production' },
+          'Printify will charge the account and start printing. Track it with get_order.'
+        )
+      };
+    }
+  );
+}
+
+export async function cancelOrder(printifyClient: PrintifyAPI, orderId: string) {
+  return runService(
+    'Cancel Order',
+    {
+      context: () => ({ OrderId: orderId, Shop: printifyClient.getCurrentShop() }),
+      tips: [
+        'Only orders that are on hold or awaiting payment can be cancelled here',
+        'Orders already in production must be cancelled through Printify support',
+        TIPS.shop
+      ]
+    },
+    async () => {
+      requireShop(printifyClient);
+      const result: any = await printifyClient.cancelOrder(orderId);
+      return {
+        result,
+        response: formatSuccessResponse(
+          'Order Cancelled',
+          { 'Order Id': result?.id ?? orderId, Status: result?.status ?? 'canceled' }
         )
       };
     }

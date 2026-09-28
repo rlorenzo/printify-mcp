@@ -713,6 +713,31 @@ describe('orders', () => {
   });
 });
 
+describe('order changes', () => {
+  it('submits, sends to production and cancels through the SDK', async () => {
+    const submit = vi.fn(async () => ({ id: 'o1' }));
+    const sendToProduction = vi.fn(async (id: string) => ({ id }));
+    const cancelUnpaid = vi.fn(async (id: string) => ({ id }));
+    const { instance } = api({ orders: { submit, sendToProduction, cancelUnpaid } });
+    await instance.createOrder({ external_id: 'x' });
+    await instance.sendOrderToProduction('o1');
+    await instance.cancelOrder('o1');
+    expect(submit).toHaveBeenCalledWith({ external_id: 'x' });
+    expect(sendToProduction).toHaveBeenCalledWith('o1');
+    expect(cancelUnpaid).toHaveBeenCalledWith('o1');
+  });
+
+  it.each(['o1/../../x', 'o1?x=1'])('rejects the order id %j before sending or cancelling', async (bad) => {
+    const sendToProduction = vi.fn();
+    const cancelUnpaid = vi.fn();
+    const { instance } = api({ orders: { sendToProduction, cancelUnpaid } });
+    await expect(instance.sendOrderToProduction(bad)).rejects.toThrow(/orderId must be a plain id/);
+    await expect(instance.cancelOrder(bad)).rejects.toThrow(/orderId must be a plain id/);
+    expect(sendToProduction).not.toHaveBeenCalled();
+    expect(cancelUnpaid).not.toHaveBeenCalled();
+  });
+});
+
 describe('catalog providers and shipping', () => {
   it('lists every provider through the SDK', async () => {
     const listProviders = vi.fn(async () => [{ id: 1 }]);

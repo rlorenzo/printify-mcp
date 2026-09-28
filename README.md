@@ -97,6 +97,9 @@ listed on the [GitHub Releases page](https://github.com/rlorenzo/printify-mcp/re
 | `list_orders` | The shop's orders, summarized (`page`, `limit`, optional `status`, `sku`) |
 | `get_order` | One order's items, costs, shipping address and tracking (`orderId`) |
 | `calculate_order_shipping` | Quote shipping per method for items to a destination, without ordering (`lineItems`, `address`) |
+| `create_order` | Create an order, held as a draft until sent to production (`lineItems`, `address`, optional `shippingMethod`) |
+| `send_order_to_production` | Print an on-hold order; **charges the account** (`orderId`, `confirm: true`) |
+| `cancel_order` | Cancel an order that is on hold or awaiting payment (`orderId`) |
 | `upload_image` | Upload from a URL, a local file in `ALLOWED_FILE_DIR`, or a `data:<mime>;base64,...` URL (`fileName`, `url`) |
 | `generate_and_upload_image` | Generate with Flux and upload to Printify (`prompt`, `fileName`, generation options) |
 | `generate_image` | Generate with Flux and save locally (`prompt`, `outputPath`, generation options) |
