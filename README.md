@@ -92,12 +92,24 @@ listed on the [GitHub Releases page](https://github.com/rlorenzo/printify-mcp/re
 | `get_blueprints` | List catalog blueprints (`page`, `limit`) |
 | `get_blueprint` | Get a blueprint (`blueprintId`) |
 | `get_print_providers` | Print providers for a blueprint (`blueprintId`) |
-| `get_variants` | Variants for a blueprint and provider (`blueprintId`, `printProviderId`) |
+| `list_all_print_providers` | Every print provider in the catalog, with location (`page`, `limit`) |
+| `get_print_provider` | A provider's location and the blueprints it offers (`printProviderId`, `page`, `limit`) |
+| `get_shipping` | Shipping costs and handling time for a blueprint from a provider (`blueprintId`, `printProviderId`, optional `country`) |
+| `get_variants` | Variants for a blueprint and provider (`blueprintId`, `printProviderId`; `showOutOfStock` to include out-of-stock ones) |
+| `list_orders` | The shop's orders, summarized (`page`, `limit`, optional `status`, `sku`) |
+| `get_order` | One order's items, costs, shipping address and tracking (`orderId`) |
+| `calculate_order_shipping` | Quote shipping per method for items to a destination, without ordering (`lineItems`, `address`) |
+| `create_order` | Create an order, held as a draft until sent to production (`lineItems`, `address`, optional `shippingMethod`) |
+| `send_order_to_production` | Print an on-hold order; **charges the account** (`orderId`, `confirm: true`) |
+| `cancel_order` | Cancel an order that is on hold or awaiting payment (`orderId`) |
 | `upload_image` | Upload from a URL, a local file in `ALLOWED_FILE_DIR`, or a `data:<mime>;base64,...` URL (`fileName`, `url`) |
+| `list_uploads` | The account's uploaded images (`page`, `limit`) |
+| `get_upload` | One uploaded image, with its preview URL (`imageId`) |
+| `archive_upload` | Archive an image, removing it from the upload library (`imageId`) |
 | `generate_and_upload_image` | Generate with Flux and upload to Printify (`prompt`, `fileName`, generation options) |
 | `generate_image` | Generate with Flux and save locally (`prompt`, `outputPath`, generation options) |
 | `get_defaults` / `set_default` | View or change default generation options (model, size, aspect ratio, etc.) |
-| `how_to_use` | Workflow guides: `product_creation`, `blueprints`, `print_providers`, `variants`, `images`, `publishing`, `image_generation` |
+| `how_to_use` | Workflow guides: `product_creation`, `blueprints`, `print_providers`, `variants`, `images`, `publishing`, `image_generation`, `orders` |
 
 **Generation options:** `model`, `width`, `height`, `aspectRatio` (overrides
 width/height), `outputFormat`, `numInferenceSteps`, `guidanceScale`,

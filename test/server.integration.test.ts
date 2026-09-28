@@ -103,7 +103,7 @@ describe('stdio server', () => {
     expect(nonJson).toEqual([]);
 
     expect(frames.find((f) => f.id === 1)?.result?.serverInfo?.name).toBe('Printify-MCP');
-    expect(frames.find((f) => f.id === 2)?.result?.tools).toHaveLength(22);
+    expect(frames.find((f) => f.id === 2)?.result?.tools).toHaveLength(34);
     expect(frames.find((f) => f.id === 3)?.result?.prompts).toHaveLength(1);
 
     // Exercises import.meta.url doc resolution, which breaks silently if the

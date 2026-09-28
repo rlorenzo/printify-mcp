@@ -110,7 +110,7 @@ describe('image tool schemas (31-line duplicated schema)', () => {
 
 describe('tool surface', () => {
   it('registers exactly the expected tools', () => {
-    expect(harness().names()).toHaveLength(22);
+    expect(harness().names()).toHaveLength(34);
   });
 });
 
@@ -119,6 +119,150 @@ describe('test harness', () => {
   // from reading the schema of a tool that isn't there.
   it('rejects an unknown tool name in callParsed', async () => {
     await expect(harness({}).callParsed('no_such_tool')).rejects.toThrow(/no such tool: no_such_tool/);
+  });
+});
+
+describe('order tools', () => {
+  it('calculate_order_shipping validates and forwards the items and address', async () => {
+    let sent: any;
+    const h = harness({
+      printifyClient: fakePrintify({ calculateOrderShipping: async (data: any) => { sent = data; return { standard: 500 }; } })
+    });
+    const res = await h.callParsed('calculate_order_shipping', {
+      lineItems: [{ productId: 'p1', variantId: 1, quantity: 1 }],
+      address: { country: 'US', zip: '10001' }
+    });
+    expect(res.isError).toBeFalsy();
+    expect(sent.address_to).toEqual({ country: 'US', region: '', zip: '10001' });
+  });
+
+  it('calculate_order_shipping rejects an empty item list at the schema', async () => {
+    const h = harness({ printifyClient: fakePrintify() });
+    await expect(h.callParsed('calculate_order_shipping', { lineItems: [], address: { country: 'US' } })).rejects.toThrow();
+  });
+
+  it.each(['list_orders', 'get_order', 'calculate_order_shipping'])('%s needs the Printify client', async (name) => {
+    const res = await harness({ printifyClient: null }).call(name, {});
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('Printify API client is not initialized');
+  });
+});
+
+describe('catalog provider and shipping tools', () => {
+  it('get_shipping passes the ids and country through to the client', async () => {
+    const calls: any[] = [];
+    const h = harness({
+      printifyClient: fakePrintify({
+        getShipping: async (...args: any[]) => { calls.push(args); return { handling_time: { value: 1, unit: 'day' }, profiles: [] }; }
+      })
+    });
+    const res = await h.callParsed('get_shipping', { blueprintId: '12', printProviderId: '29', country: 'US' });
+    expect(res.isError).toBeFalsy();
+    expect(res.content[0].text).toContain('**Country**: "US"');
+    expect(calls).toEqual([['12', '29']]);
+  });
+
+  it.each(['list_all_print_providers', 'get_print_provider', 'get_shipping'])('%s needs the Printify client', async (name) => {
+    const res = await harness({ printifyClient: null }).call(name, {});
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('Printify API client is not initialized');
+  });
+});
+
+describe('how_to_use orders', () => {
+  it('serves the orders guide', async () => {
+    const res = await harness().call('how_to_use', { topic: 'orders' });
+    expect(res.isError).toBeFalsy();
+    expect(res.content[0].text).toContain('calculate_order_shipping');
+  });
+});
+
+describe('order change tools', () => {
+  // Sending to production spends money, so it takes an explicit confirmation.
+  it('send_order_to_production requires confirm: true', async () => {
+    const sent: string[] = [];
+    const h = harness({
+      printifyClient: fakePrintify({ sendOrderToProduction: async (id: string) => { sent.push(id); return { id }; } })
+    });
+    await expect(h.callParsed('send_order_to_production', { orderId: 'o1' })).rejects.toThrow();
+    await expect(h.callParsed('send_order_to_production', { orderId: 'o1', confirm: false })).rejects.toThrow();
+    expect(sent).toEqual([]);
+    const res = await h.callParsed('send_order_to_production', { orderId: 'o1', confirm: true });
+    expect(res.isError).toBeFalsy();
+    expect(sent).toEqual(['o1']);
+  });
+
+  it('create_order requires the full shipping address', async () => {
+    const h = harness({ printifyClient: fakePrintify({ createOrder: async () => ({ id: 'o' }) }) });
+    await expect(h.callParsed('create_order', {
+      lineItems: [{ sku: 'S', quantity: 1 }],
+      address: { country: 'US', zip: '10001' }
+    })).rejects.toThrow();
+  });
+
+  it('marks sending to production and cancelling as destructive', () => {
+    const tools = (harness() as any).server._registeredTools;
+    expect(tools.send_order_to_production.annotations.destructiveHint).toBe(true);
+    expect(tools.cancel_order.annotations.destructiveHint).toBe(true);
+  });
+});
+
+describe('create_order shipping methods', () => {
+  // Code 3 is Printify Express; a bare "express" would be confused with the
+  // separate Express rate that calculate_order_shipping quotes.
+  it('accepts printify_express and rejects a bare express', async () => {
+    let sent: any;
+    const h = harness({ printifyClient: fakePrintify({ createOrder: async (data: any) => { sent = data; return { id: 'o' }; } }) });
+    const address = { firstName: 'A', lastName: 'B', address1: '1 St', city: 'C', zip: '1', country: 'US' };
+    await expect(h.callParsed('create_order', { lineItems: [{ sku: 'S', quantity: 1 }], address, shippingMethod: 'express' })).rejects.toThrow();
+    const res = await h.callParsed('create_order', { lineItems: [{ sku: 'S', quantity: 1 }], address, shippingMethod: 'printify_express' });
+    expect(res.isError).toBeFalsy();
+    expect(sent.shipping_method).toBe(3);
+    expect(sent.is_printify_express).toBe(true);
+  });
+});
+
+describe('list_orders paging', () => {
+  // Negative or fractional values would otherwise reach the Printify API.
+  it.each([{ page: 0 }, { page: -1 }, { page: 1.5 }, { limit: 0 }, { limit: -5 }, { limit: 2.5 }])(
+    'rejects %j at the schema', async (args) => {
+      const h = harness({ printifyClient: fakePrintify() });
+      await expect(h.callParsed('list_orders', args)).rejects.toThrow();
+    });
+
+  it('accepts positive integers', async () => {
+    let seen: any;
+    const h = harness({ printifyClient: fakePrintify({ listOrders: async (opts: any) => { seen = opts; return { data: [] }; } }) });
+    const res = await h.callParsed('list_orders', { page: 2, limit: 5 });
+    expect(res.isError).toBeFalsy();
+    expect(seen).toEqual({ page: 2, limit: 5 });
+  });
+});
+
+describe('get_variants showOutOfStock', () => {
+  it('passes the flag from the tool arguments to the client', async () => {
+    const calls: any[] = [];
+    const h = harness({
+      printifyClient: fakePrintify({
+        getVariants: async (...args: any[]) => { calls.push(args); return { variants: [] }; }
+      })
+    });
+    const res = await h.callParsed('get_variants', { blueprintId: '12', printProviderId: '29', showOutOfStock: true });
+    expect(res.isError).toBeFalsy();
+    expect(calls).toEqual([['12', '29', { showOutOfStock: true }]]);
+  });
+});
+
+describe('upload library tools', () => {
+  it.each(['list_uploads', 'get_upload', 'archive_upload'])('%s needs the Printify client', async (name) => {
+    const res = await harness({ printifyClient: null }).call(name, {});
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('Printify API client is not initialized');
+  });
+
+  it('archive_upload is marked destructive', () => {
+    const tools = (harness() as any).server._registeredTools;
+    expect(tools.archive_upload.annotations.destructiveHint).toBe(true);
   });
 });
 

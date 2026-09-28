@@ -36,3 +36,13 @@ Available positions depend on the blueprint (see `get_variants`). For per-colorw
 ## AI-generated images
 
 `generate_and_upload_image` uses the defaults from `get_defaults`/`set_default`, and any option can be overridden per call. The default Flux 1.1 Pro Ultra model requires `IMGBB_API_KEY`. See `how_to_use({ topic: "image_generation" })` for all options and prompt tips.
+
+## Reusing uploads
+
+Every upload stays in the account's library, so earlier artwork can be reused instead of uploaded again:
+
+```javascript
+list_uploads({ page: 1, limit: 10 })   // id, file name, dimensions, upload time
+get_upload({ imageId: "5e16d66791287a0006e522b2" })   // adds the preview URL
+archive_upload({ imageId: "5e16d66791287a0006e522b2" })   // archives it, removing it from the library
+```

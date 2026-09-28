@@ -11,6 +11,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `set_publish_succeeded`, `set_publish_failed` and `notify_unpublished`
   report publishing results for custom (API) sales channels, so products do
   not stay locked as "publishing".
+- `list_uploads`, `get_upload` and `archive_upload` find, inspect and archive
+  images in the account's upload library.
+- `list_orders` and `get_order` read the current shop's orders. Lists leave
+  out street addresses and contact details; `get_order` returns them for one
+  order.
+- `calculate_order_shipping` quotes shipping per method for prospective
+  items and a destination, without placing an order.
+- `create_order` creates an order on hold; `send_order_to_production`
+  (which requires `confirm: true`, since it charges the account) prints it,
+  and `cancel_order` cancels one that is on hold or awaiting payment.
+- An `orders` topic for `how_to_use`.
+- `list_all_print_providers` and `get_print_provider` browse the catalog's
+  print providers directly, not only through a blueprint.
+- `get_shipping` reports a blueprint's shipping costs and handling time from a
+  provider, optionally for one country.
+- `get_variants` takes `showOutOfStock` to include variants the API hides
+  because they are out of stock.
 
 ### Fixed
 - Defaults changed with `set_default` for `outputFormat`, `safetyTolerance`,
