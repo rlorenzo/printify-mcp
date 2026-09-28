@@ -62,3 +62,24 @@ describe('getUpload and archiveUpload', () => {
     expect(text).toContain('no longer listed in the upload library');
   });
 });
+
+describe('malformed upload responses', () => {
+  // A missing data array is not an empty library and must not read as one.
+  it.each([{}, null, { data: null }, { data: 'x' }])('list_uploads rejects %j', async (response) => {
+    const result = await listUploads(fakeClient({ listUploads: async () => response }));
+    expect(result.success).toBe(false);
+    expect(result.errorResponse!.content[0].text).toContain('without a data array');
+  });
+
+  it('list_uploads still reports a genuinely empty library', async () => {
+    const result = await listUploads(fakeClient({ listUploads: async () => ({ data: [] }) }));
+    expect(result.success).toBe(true);
+    expect(result.response!.content[0].text).toContain('**Count**: "0"');
+  });
+
+  it.each([null, {}, { file_name: 'x.png' }])('get_upload rejects %j', async (response) => {
+    const result = await getUpload(fakeClient({ getUpload: async () => response }), 'img1');
+    expect(result.success).toBe(false);
+    expect(result.errorResponse!.content[0].text).toContain('no upload record for image img1');
+  });
+});

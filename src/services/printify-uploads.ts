@@ -27,7 +27,12 @@ export async function listUploads(
       const page = options.page || 1;
       const limit = options.limit || 10;
       const uploads: any = await printifyClient.listUploads(page, limit);
-      const data = Array.isArray(uploads?.data) ? uploads.data : [];
+      // An empty library is `data: []`; a response without the array is not
+      // an empty page and must not be reported as one.
+      if (!Array.isArray(uploads?.data)) {
+        throw new Error('Printify returned an upload list without a data array');
+      }
+      const data = uploads.data.filter((upload: any) => upload && typeof upload === 'object');
 
       return {
         uploads,
@@ -57,6 +62,9 @@ export async function getUpload(printifyClient: PrintifyAPI, imageId: string) {
     },
     async () => {
       const upload: any = await printifyClient.getUpload(imageId);
+      if (!upload || typeof upload !== 'object' || !upload.id) {
+        throw new Error(`Printify returned no upload record for image ${imageId}`);
+      }
       return {
         upload,
         response: formatSuccessResponse(
